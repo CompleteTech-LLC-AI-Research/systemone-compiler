@@ -242,3 +242,63 @@ For scale, E4/E5 together were 48 requests and 43.5k input tokens. The minimal
 configuration is roughly **1,000×** that. The package deliberately provides no
 dollar estimator and reports `dollar_cost: null`; set provider-side spending
 limits before authorizing either configuration.
+
+---
+
+## BLOCKER found by the live pilot: probability-sum tolerance vs 77 labels
+
+A bounded live pilot (arm A baseline, 200 rows sampled from **validation** — the
+test split was deliberately not touched) aborted on the first request:
+
+```text
+s1: Probability distribution does not sum to one: intent.
+```
+
+One diagnostic request established the cause. It is **not** floating-point
+accumulation:
+
+| observation | value |
+|---|---|
+| labels returned | 77 |
+| sum of probabilities | **0.99** |
+| deviation from 1.0 | **1.0e-2** |
+| runtime tolerance (`runtime.py`) | `abs_tol=1e-4` |
+| decimal places returned | 72 values at 1 dp, 5 at 2 dp |
+| top-3 probabilities | 0.93, 0.02, 0.02 |
+
+**Jev quantizes Choice probabilities to two decimal places.** Over 77 labels the
+rounded distribution sums to 0.99, which is 100× outside the runtime's fixed
+`abs_tol=1e-4`. The tolerance does not scale with label cardinality:
+
+| labels | worst-case quantization drift (0.005 × n) | passes 1e-4? |
+|---|---|---|
+| 4 (`support_triage`) | 0.020 | only because drift happened to be small |
+| 20 | 0.100 | no |
+| 77 (`banking77`) | 0.385 | no |
+
+This is why every earlier live run succeeded: `support_triage` has 3–4 labels per
+question and happened to land inside tolerance. **Any high-cardinality Choice is
+currently unusable against live Jev**, which blocks the whole BANKING77
+experiment regardless of budget.
+
+Note the runtime already renormalizes immediately after this check
+(`probs = {k: v / total ...}`), so the guard's purpose is to reject garbage, not
+to enforce precision. A tolerance that scales with label count would preserve
+that purpose.
+
+**Deliberately not patched.** `AGENTS.md` says *"Do not weaken checks to make a
+benchmark pass."* Changing a validation guard so my own experiment can run is
+exactly that shape, even though this looks like a genuine false positive. The
+tolerance choice has real safety implications and needs a human decision.
+Options, in rough order of conservatism:
+
+1. Scale with cardinality and observed quantization:
+   `abs_tol = max(1e-4, 0.005 * len(probs))`. Principled — it is exactly the
+   worst-case rounding bound — but permits 0.385 drift at n=77.
+2. Scale sub-linearly: `max(1e-4, 0.01 * sqrt(len(probs)))` → 0.088 at n=77,
+   0.02 at n=4. Tighter, but not derived from a bound.
+3. Keep the tight absolute check only for small n, and switch to a relative band
+   (e.g. sum within [0.95, 1.05]) above some cardinality.
+
+**Pilot cost: 2 live requests.** It surfaced a blocker that would otherwise have
+appeared partway into a 32,664-request run.
