@@ -1,6 +1,16 @@
+<div align="center">
+
 # System One Compiler
 
 **Declare a decision. Compile typed Jev questions. Measure them. Ship a JSON program.**
+
+![Python: 3.11%2B](https://img.shields.io/badge/Python-3.11%2B-3776ab?style=flat-square) ![Artifact: JSON](https://img.shields.io/badge/Artifact-JSON-0f766e?style=flat-square) [![License: MIT](https://img.shields.io/badge/License-MIT-64748b?style=flat-square)](LICENSE)
+
+[No-key demo](#run-the-no-key-demo) · [Declaration](#the-declaration) · [Commands](#commands) · [Evaluation](#data-and-evaluation) · [Runtime](#production-shaped-runtime)
+
+</div>
+
+---
 
 A Python 0.1 implementation of a declarative TypeSafe AI/Jev framework, with a
 DSPy architect, a standalone GEPA adapter, bounded structural search, separate
@@ -12,6 +22,24 @@ policy fitting, and a lightweight runtime. The application developer works with
 > interfaces, but their real packages and live providers were not available in
 > the packaging environment. Do not interpret mock metrics as Jev results or
 > evidence that prompts improved. See `docs/BUILD_REPORT.md` for actual results.
+
+## From declaration to runtime
+
+```mermaid
+flowchart LR
+    S[State and decision contract] --> C[Compile and select]
+    D[Train and validation splits] --> C
+    C --> P[Calibration and review gates]
+    P --> F[Frozen JSON program]
+    F --> T[Held-out test]
+    F --> R[Lightweight typed runtime]
+```
+
+| Declare | Compile | Run |
+| --- | --- | --- |
+| Define inputs, labels, and decision types in YAML. | Search within a fixed contract and evaluate on separate splits. | Load a frozen program; application code owns side effects. |
+
+DSPy and GEPA belong to compile time. The frozen runtime does not import either.
 
 ## Start with your coding LLM
 
