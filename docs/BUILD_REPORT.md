@@ -1,0 +1,70 @@
+# Build and verification report
+
+Release: **System One Compiler 0.1.0**. Verification date: September 19, 2026
+(America/New_York; the packaging host's UTC date is September 20).
+
+## Executed successfully
+
+- Python **3.13.5**, Linux. Pydantic 2.13.4,
+  PyYAML 6.0.3, pytest 9.0.2.
+- **111 tests passed, 3 optional tests skipped, 0 failed.**
+- Statement coverage: **87.67%** (1116/1273 statements),
+  rounded to 88% by the coverage reporter. Coverage is a software-test measure,
+  not a model-quality or integration-compatibility score.
+- Editable installation and pure-Python wheel build succeeded using installed
+  build tools with `--no-deps --no-build-isolation`. This did not resolve the
+  optional dependency tree. The wheel is included in `wheels/`; its dependencies
+  still need to be installed.
+- Installed the wheel in an isolated target directory and asserted imports came
+  from that directory, not the source checkout. Ran `init`, `demo`, `draft`,
+  `schema`, `export-playground`, and `harden` successfully against that wheel.
+- Verified importing the runtime package does not import DSPy, GEPA, or the
+  TypeSafe SDK.
+- Python compileall and Bash script syntax checks succeeded.
+
+The no-key demo completed with synthetic lexical answers and `optimizer=none`.
+It created actual artifacts and reports without network calls. This is not a
+real Jev benchmark. See `examples/compiled_demo/` for the generated snapshot.
+
+## Not executed / not established
+
+The real `typesafe_sdk`, `dspy`, and `gepa` packages were unavailable in this
+packaging environment. Their three optional tests skipped, and
+`doctor --check-optional` correctly returned an unverified status (exit code 2).
+A package-resolution attempt did not find the requested GEPA distribution here.
+This does not establish that the published package is unavailable elsewhere.
+
+Core tests include explicitly labeled SDK/engine/teacher test doubles. They do
+not replace real-package integration tests. No TypeSafe API key or teacher model
+was configured. **No live TypeSafe request, teacher request, real GEPA optimization,
+or real prompt-quality gain was verified.** The setup prompt directs your coding
+agent to close those gaps in your environment with permission and real credentials.
+
+Ruff was unavailable, so a full Ruff run was not performed. Unused imports were
+reviewed and Python parsed/compiled successfully; these are not equivalent to
+Ruff. Windows/PowerShell, macOS, Python 3.11/3.12, and remote GitHub CI execution
+were not exercised. Their setup/CI files are supplied for local or subsequent CI
+verification. No fully resolved transitive dependency lock is claimed.
+
+## Reproduce
+
+```text
+python -m pip install -e ".[dev]"
+python -m pytest -q --cov=s1compiler --cov-report=term-missing
+python -m s1compiler demo --out runs/reproduce-demo
+python -m pip install -e ".[all,dev]"
+python -m s1compiler doctor --check-optional
+python -m pytest -q
+```
+
+Install dependencies before expecting optional tests to run. These commands alone
+do not authorize paid inference. Machine-readable status is in
+`reports/offline_verification.json`.
+
+## Fresh ZIP extraction
+
+Extracted the archive into a new directory, verified every SHA256 manifest entry,
+confirmed imports resolved to the extracted source, and reran the full suite:
+**111 passed, 3 optional tests skipped, 0 failed**. The extracted no-key demo also
+completed successfully with `optimizer=none` and zero network calls. Only this
+verification report and the manifest/archive were updated after that source check.

@@ -1,0 +1,21 @@
+name: file_organizer
+model: jev-1.13.0
+description: Suggest a category for one pre-extracted text document. Never move or delete files.
+state:
+  filename: {type: string, description: Basename only; no absolute path required.}
+  text_excerpt: {type: string, description: A locally extracted and minimized text excerpt.}
+decisions:
+  category:
+    type: choice
+    goal: Which category best describes the document in `text_excerpt`, using `filename` only as supporting context?
+    criteria:
+      invoices: Invoices, receipts, purchase orders, or payment requests.
+      documentation: Manuals, guides, notes, and explanatory reference text.
+      source_code: Computer program source text or configuration used by a program.
+      other: Material not covered by the other descriptions.
+  sensitive:
+    type: noul
+    goal: Does `text_excerpt` explicitly contain a credential, account secret, or personal identifier?
+    criteria:
+      "true": An actual password, API key, financial account identifier, or personal identifier appears.
+      "false": No such information is present, or it is only a generic placeholder.

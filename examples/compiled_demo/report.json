@@ -1,0 +1,475 @@
+{
+  "format": "systemone-report/v1",
+  "program_sha256": "62e1175db30ea3592d3364304b3b7b70f61d347439eec50d8d44e09a63489d11",
+  "status": "synthetic",
+  "deployment_approved": false,
+  "selection_history": [
+    {
+      "phase": "template",
+      "validation_objective": 0.7123822902448212
+    }
+  ],
+  "optimization": {
+    "engine": "none"
+  },
+  "baseline_validation": {
+    "n_examples": 12,
+    "synthetic": true,
+    "objective": 0.7123822902448212,
+    "objective_definition": "weighted mean: 1-multiclass_Brier/2; 1-binary_Brier; 1-normalized_MAE",
+    "decisions": {
+      "department": {
+        "type": "choice",
+        "n": 12,
+        "accuracy": 0.4166666666666667,
+        "accepted_n": 1,
+        "coverage": 0.08333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.7934567085261071,
+        "macro_f1": 0.3653846153846154,
+        "brier": 0.7675083180347834,
+        "log_loss": 1.3781940759616778,
+        "ece_10_bins": 0.43495631719297134,
+        "confusion": {
+          "billing": {
+            "billing": 1,
+            "technical": 0,
+            "sales": 2,
+            "other": 0
+          },
+          "technical": {
+            "billing": 0,
+            "technical": 1,
+            "sales": 2,
+            "other": 0
+          },
+          "sales": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          },
+          "other": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          }
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "n": 12,
+        "accuracy": 0.16666666666666666,
+        "accepted_n": 1,
+        "coverage": 0.08333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.7934567085261071,
+        "macro_f1": 0.16666666666666666,
+        "brier": 0.21554490206226037,
+        "log_loss": 0.6143051253467207,
+        "ece_10_bins": 0.4490120286160094,
+        "confusion": {
+          "False": {
+            "False": 1,
+            "True": 10
+          },
+          "True": {
+            "False": 0,
+            "True": 1
+          }
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "n": 12,
+        "within_tolerance_rate": 0.5,
+        "accepted_n": 0,
+        "coverage": 0.0,
+        "selective_error": null,
+        "selective_error_wilson_upper_95": null,
+        "mae": 0.5271081363717686,
+        "rmse": 0.7102176471655026,
+        "score_tolerance": 0.5
+      }
+    },
+    "uncached_latency_ms_mean": 0.06570416665378313,
+    "uncached_latency_ms_p95": 0.13069699991774542,
+    "cache_hits": 0,
+    "notes": [
+      "Small samples and repeated selection can overfit; held-out results are not guarantees.",
+      "Threshold tuning does not calibrate the probabilities themselves.",
+      "Wilson bounds after threshold search are descriptive, not risk-control certificates."
+    ]
+  },
+  "selected_validation_objective": 0.7123822902448212,
+  "calibration_fit": {
+    "department": {
+      "status": "review_only",
+      "reason": "No threshold met sample/error requirements.",
+      "policy": {
+        "noul_threshold": 0.5,
+        "min_gate": 1.0,
+        "force_review": true
+      },
+      "min_samples": 3,
+      "empirical_error_target": 0.05
+    },
+    "urgent": {
+      "status": "fitted",
+      "accepted_n": 4,
+      "empirical_error": 0.0,
+      "wilson_upper_95_descriptive": 0.48990002040399916,
+      "policy": {
+        "noul_threshold": 0.500000001,
+        "min_gate": 0.7310585786300049,
+        "force_review": false
+      },
+      "min_samples": 3,
+      "empirical_error_target": 0.05
+    },
+    "frustration": {
+      "status": "fitted",
+      "accepted_n": 4,
+      "empirical_error": 0.0,
+      "wilson_upper_95_descriptive": 0.48990002040399916,
+      "policy": {
+        "noul_threshold": 0.5,
+        "min_gate": 0.21416328135118667,
+        "force_review": false
+      },
+      "min_samples": 3,
+      "empirical_error_target": 0.05
+    }
+  },
+  "calibration_evaluation": {
+    "n_examples": 12,
+    "synthetic": true,
+    "objective": 0.7270662584044539,
+    "objective_definition": "weighted mean: 1-multiclass_Brier/2; 1-binary_Brier; 1-normalized_MAE",
+    "decisions": {
+      "department": {
+        "type": "choice",
+        "n": 12,
+        "accuracy": 0.4166666666666667,
+        "accepted_n": 0,
+        "coverage": 0.0,
+        "selective_error": null,
+        "selective_error_wilson_upper_95": null,
+        "macro_f1": 0.3153846153846154,
+        "brier": 0.7225752989238345,
+        "log_loss": 1.2910555860053954,
+        "ece_10_bins": 0.34255062320861734,
+        "confusion": {
+          "billing": {
+            "billing": 2,
+            "technical": 0,
+            "sales": 1,
+            "other": 0
+          },
+          "technical": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          },
+          "sales": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          },
+          "other": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          }
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "n": 12,
+        "accuracy": 0.9166666666666666,
+        "accepted_n": 4,
+        "coverage": 0.3333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.48990002040399916,
+        "macro_f1": 0.8991596638655461,
+        "brier": 0.18009312719352435,
+        "log_loss": 0.5289346818443935,
+        "ece_10_bins": 0.3087093031616395,
+        "confusion": {
+          "False": {
+            "False": 8,
+            "True": 0
+          },
+          "True": {
+            "False": 1,
+            "True": 3
+          }
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "n": 12,
+        "within_tolerance_rate": 0.5,
+        "accepted_n": 4,
+        "coverage": 0.3333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.48990002040399916,
+        "mae": 0.5548408962623934,
+        "rmse": 0.7229521279061857,
+        "score_tolerance": 0.5
+      }
+    },
+    "uncached_latency_ms_mean": 0.05695349999731055,
+    "uncached_latency_ms_p95": 0.06241400001272268,
+    "cache_hits": 0,
+    "notes": [
+      "Small samples and repeated selection can overfit; held-out results are not guarantees.",
+      "Threshold tuning does not calibrate the probabilities themselves.",
+      "Wilson bounds after threshold search are descriptive, not risk-control certificates."
+    ]
+  },
+  "baseline_test": {
+    "n_examples": 12,
+    "synthetic": true,
+    "objective": 0.6697208972910534,
+    "objective_definition": "weighted mean: 1-multiclass_Brier/2; 1-binary_Brier; 1-normalized_MAE",
+    "decisions": {
+      "department": {
+        "type": "choice",
+        "n": 12,
+        "accuracy": 0.4166666666666667,
+        "accepted_n": 1,
+        "coverage": 0.08333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.7934567085261071,
+        "macro_f1": 0.3653846153846154,
+        "brier": 0.7540510768520895,
+        "log_loss": 1.347875405458093,
+        "ece_10_bins": 0.48354848827550534,
+        "confusion": {
+          "billing": {
+            "billing": 1,
+            "technical": 0,
+            "sales": 2,
+            "other": 0
+          },
+          "technical": {
+            "billing": 0,
+            "technical": 1,
+            "sales": 2,
+            "other": 0
+          },
+          "sales": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          },
+          "other": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          }
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "n": 12,
+        "accuracy": 0.16666666666666666,
+        "accepted_n": 1,
+        "coverage": 0.08333333333333333,
+        "selective_error": 0.0,
+        "selective_error_wilson_upper_95": 0.7934567085261071,
+        "macro_f1": 0.14285714285714285,
+        "brier": 0.2530579882362648,
+        "log_loss": 0.6911100703909514,
+        "ece_10_bins": 0.398207037650631,
+        "confusion": {
+          "False": {
+            "False": 0,
+            "True": 10
+          },
+          "True": {
+            "False": 0,
+            "True": 2
+          }
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "n": 12,
+        "within_tolerance_rate": 0.3333333333333333,
+        "accepted_n": 0,
+        "coverage": 0.0,
+        "selective_error": null,
+        "selective_error_wilson_upper_95": null,
+        "mae": 0.7215075629290602,
+        "rmse": 0.8302568553831691,
+        "score_tolerance": 0.5
+      }
+    },
+    "uncached_latency_ms_mean": 0.06603883334340328,
+    "uncached_latency_ms_p95": 0.1356450000002951,
+    "cache_hits": 0,
+    "notes": [
+      "Small samples and repeated selection can overfit; held-out results are not guarantees.",
+      "Threshold tuning does not calibrate the probabilities themselves.",
+      "Wilson bounds after threshold search are descriptive, not risk-control certificates."
+    ]
+  },
+  "compiled_test": {
+    "n_examples": 12,
+    "synthetic": true,
+    "objective": 0.6697208972910534,
+    "objective_definition": "weighted mean: 1-multiclass_Brier/2; 1-binary_Brier; 1-normalized_MAE",
+    "decisions": {
+      "department": {
+        "type": "choice",
+        "n": 12,
+        "accuracy": 0.4166666666666667,
+        "accepted_n": 0,
+        "coverage": 0.0,
+        "selective_error": null,
+        "selective_error_wilson_upper_95": null,
+        "macro_f1": 0.3653846153846154,
+        "brier": 0.7540510768520895,
+        "log_loss": 1.347875405458093,
+        "ece_10_bins": 0.48354848827550534,
+        "confusion": {
+          "billing": {
+            "billing": 1,
+            "technical": 0,
+            "sales": 2,
+            "other": 0
+          },
+          "technical": {
+            "billing": 0,
+            "technical": 1,
+            "sales": 2,
+            "other": 0
+          },
+          "sales": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          },
+          "other": {
+            "billing": 0,
+            "technical": 0,
+            "sales": 3,
+            "other": 0
+          }
+        }
+      },
+      "urgent": {
+        "type": "noul",
+        "n": 12,
+        "accuracy": 0.8333333333333334,
+        "accepted_n": 2,
+        "coverage": 0.16666666666666666,
+        "selective_error": 0.5,
+        "selective_error_wilson_upper_95": 0.905471345199134,
+        "macro_f1": 0.7,
+        "brier": 0.2530579882362648,
+        "log_loss": 0.6911100703909514,
+        "ece_10_bins": 0.398207037650631,
+        "confusion": {
+          "False": {
+            "False": 9,
+            "True": 1
+          },
+          "True": {
+            "False": 1,
+            "True": 1
+          }
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "n": 12,
+        "within_tolerance_rate": 0.3333333333333333,
+        "accepted_n": 5,
+        "coverage": 0.4166666666666667,
+        "selective_error": 0.2,
+        "selective_error_wilson_upper_95": 0.6244717358814612,
+        "mae": 0.7215075629290602,
+        "rmse": 0.8302568553831691,
+        "score_tolerance": 0.5
+      }
+    },
+    "uncached_latency_ms_mean": null,
+    "uncached_latency_ms_p95": null,
+    "cache_hits": 12,
+    "notes": [
+      "Small samples and repeated selection can overfit; held-out results are not guarantees.",
+      "Threshold tuning does not calibrate the probabilities themselves.",
+      "Wilson bounds after threshold search are descriptive, not risk-control certificates."
+    ]
+  },
+  "test_objective_delta": 0.0,
+  "accounting": {
+    "backend": "mock-lexical/v1",
+    "synthetic": true,
+    "requests_attempted": 36,
+    "request_limit": 100,
+    "cache_hits": 12,
+    "reported_input_tokens": 0,
+    "reported_output_tokens": 0,
+    "usage_unknown_calls": 36,
+    "models_seen": [
+      "jev-1.13.0"
+    ],
+    "dollar_cost": null
+  },
+  "teacher": null,
+  "provenance": {
+    "status": "synthetic",
+    "deployment_approved": false,
+    "compiled_at": "2026-09-20T00:50:38.016445+00:00",
+    "source_sha256": "d16702c6565a64c35e9782d9873b92c664d07f068f93b07b77714521525c88ee",
+    "splits": {
+      "train": {
+        "sha256": "877d2b43d0c739c2e315f4ee9da90f990be86b829e112266086ebc91dfc06f5c",
+        "n": 12
+      },
+      "validation": {
+        "sha256": "ccc8a5b2d17df08b6c3796db1cabfc42d6ab2cb4f50971d164840189ac48de2f",
+        "n": 12
+      },
+      "calibration": {
+        "sha256": "fce5a3c80ed37ac95dbf0d32c739f638e6e24264bb714107511db32b5d092902",
+        "n": 12
+      },
+      "test": {
+        "sha256": "56e44390361f338290dee79552ec92b49e228cc50604b379f9cb360be3e36a55",
+        "n": 12
+      }
+    },
+    "architect": "template",
+    "optimizer": "none",
+    "seed": 7,
+    "versions": {
+      "systemone-compiler": "0.1.0",
+      "pydantic": "2.13.4",
+      "PyYAML": "6.0.3",
+      "typesafe-sdk": null,
+      "dspy": null,
+      "gepa": null
+    },
+    "calibration": "empirical threshold fitting, not posterior calibration",
+    "teacher_model": null
+  },
+  "limitations": [
+    "Synthetic fixture metrics never establish Jev quality or optimization gains.",
+    "A held-out test score is descriptive; choose deployment acceptance criteria independently.",
+    "Changing labels, Score meaning, or target model requires a new dataset version and evaluation.",
+    "Selection is sequential structure-then-wording; not a global joint-search optimizer.",
+    "No autonomous actions, arbitrary code execution, or trained model weights are included."
+  ]
+}

@@ -1,0 +1,87 @@
+{
+  "program_sha256": "62e1175db30ea3592d3364304b3b7b70f61d347439eec50d8d44e09a63489d11",
+  "model": "jev-1.13.0",
+  "synthetic": true,
+  "decisions": {
+    "department": {
+      "type": "choice",
+      "value": "sales",
+      "probabilities": {
+        "billing": 0.14173942690489524,
+        "technical": 0.14173942690489524,
+        "sales": 0.5747817192853143,
+        "other": 0.14173942690489524
+      },
+      "p_true": null,
+      "vendor_confidence": 0.1711208282166543,
+      "gate_score": 0.5747817192853143,
+      "gate_basis": "selected_option_probability",
+      "review_required": true
+    },
+    "urgent": {
+      "type": "noul",
+      "value": false,
+      "probabilities": {
+        "false": 0.5,
+        "true": 0.5
+      },
+      "p_true": 0.5,
+      "vendor_confidence": null,
+      "gate_score": 0.5,
+      "gate_basis": "selected_binary_outcome_probability",
+      "review_required": true
+    },
+    "frustration": {
+      "type": "score",
+      "value": 1.0,
+      "probabilities": {
+        "0": 0.3333333333333333,
+        "1": 0.3333333333333333,
+        "2": 0.3333333333333333
+      },
+      "p_true": null,
+      "vendor_confidence": 2.220446049250313e-16,
+      "gate_score": 2.220446049250313e-16,
+      "gate_basis": "vendor_score_confidence",
+      "review_required": true
+    }
+  },
+  "answers": {
+    "department": {
+      "type": "choice",
+      "choice": "sales",
+      "probabilities": {
+        "billing": 0.14173942690489524,
+        "technical": 0.14173942690489524,
+        "sales": 0.5747817192853143,
+        "other": 0.14173942690489524
+      },
+      "confidence": 0.1711208282166543
+    },
+    "urgent": {
+      "type": "noul",
+      "noul": 0.5
+    },
+    "frustration": {
+      "type": "score",
+      "score": 1.0,
+      "probabilities": {
+        "0": 0.3333333333333333,
+        "1": 0.3333333333333333,
+        "2": 0.3333333333333333
+      },
+      "confidence": 2.220446049250313e-16,
+      "legend": {
+        "0": "Calm and neutral, including routine factual questions or polite requests.",
+        "1": "Concerned or disappointed, but civil and not expressing extreme anger.",
+        "2": "Explicitly furious or very angry, with strong statements of frustration."
+      }
+    }
+  },
+  "usage": {
+    "input_tokens": null,
+    "output_tokens": null
+  },
+  "latency_ms": 0.06769200001599529,
+  "cache_hit": false
+}

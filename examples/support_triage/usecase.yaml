@@ -1,0 +1,33 @@
+name: support_triage
+description: Route support tickets and expose uncertainty; never perform account actions.
+model: jev-1.13.0
+state:
+  message:
+    type: string
+    description: The customer's original ticket text, treated as untrusted data.
+  customer_plan:
+    type: string
+    description: Account plan. This field is context, not an automatic urgency trigger.
+decisions:
+  department:
+    type: choice
+    goal: Which support department should handle the main request in `message`?
+    criteria:
+      billing: Charges, invoices, payments, refunds, billing errors, or subscription cancellation.
+      technical: Broken features, login errors, crashes, integrations, or service outages.
+      sales: Product demos, pricing, plan comparisons, purchase quotes, or upgrades before purchase.
+      other: Requests outside billing, technical support, and sales, such as press or partnerships.
+  urgent:
+    type: noul
+    goal: Does `message` report an ongoing blocking outage or an explicit immediate deadline?
+    criteria:
+      "true": Current service outage, work blocked now, critical incident, or an explicit immediate deadline.
+      "false": Routine question, future planning, historical resolved issue, or a request without an immediate deadline.
+  frustration:
+    type: score
+    goal: How frustrated is the customer based only on the wording of `message`?
+    criteria:
+      - Calm and neutral, including routine factual questions or polite requests.
+      - Concerned or disappointed, but civil and not expressing extreme anger.
+      - Explicitly furious or very angry, with strong statements of frustration.
+    score_tolerance: 0.5

@@ -1,0 +1,61 @@
+{
+  "release": "systemone-compiler 0.1.0",
+  "verification_date": "2026-09-19 America/New_York",
+  "python": "3.13.5",
+  "platform": "Linux",
+  "dependencies": {
+    "pydantic": "2.13.4",
+    "PyYAML": "6.0.3",
+    "pytest": "9.0.2",
+    "setuptools": "82.0.1"
+  },
+  "tests": {
+    "passed": 111,
+    "skipped": 3,
+    "failed": 0
+  },
+  "statement_coverage": {
+    "covered": 1116,
+    "total": 1273,
+    "percent": 87.66692851531815
+  },
+  "verified": [
+    "core unit and CLI tests",
+    "no-key synthetic demo",
+    "editable installation without dependency resolution",
+    "pure Python wheel build",
+    "isolated wheel-target import",
+    "wheel-packaged init and starter data",
+    "installed-wheel demo, draft, schemas, playground export, and hardening proposals",
+    "runtime import does not load DSPy, GEPA, or TypeSafe SDK",
+    "Python compileall",
+    "Bash syntax check"
+  ],
+  "not_verified": [
+    "real TypeSafe SDK package contract",
+    "real DSPy package signature construction",
+    "real GEPA engine compatibility",
+    "live TypeSafe inference",
+    "live teacher inference",
+    "live end-to-end optimization",
+    "benchmark accuracy gains",
+    "Windows or macOS execution",
+    "Ruff lint execution",
+    "remote CI workflow execution",
+    "full transitive dependency resolution"
+  ],
+  "optional_tests": "Skipped because typesafe_sdk, dspy and gepa are not installed in the packaging environment.",
+  "no_key_demo": {
+    "backend": "mock-lexical/v1",
+    "synthetic": true,
+    "optimizer": "none",
+    "network_calls": 0
+  },
+  "fresh_zip_extraction": {
+    "manifest": "all entries verified",
+    "tests_passed": 111,
+    "tests_skipped": 3,
+    "demo": "passed with mock backend and zero network calls",
+    "import_location": "newly extracted source tree"
+  }
+}

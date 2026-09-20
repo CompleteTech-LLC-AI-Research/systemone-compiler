@@ -1,0 +1,20 @@
+name: pr_risk
+model: jev-1.13.0
+description: Advisory risk judgments for a supplied diff; not permission to merge a PR.
+state:
+  diff: {type: string, description: A bounded diff with secrets removed.}
+  files: {type: array, description: Changed relative file paths.}
+decisions:
+  breaking_change:
+    type: noul
+    goal: Does `diff` visibly remove or incompatibly change an externally consumed API contract?
+    criteria:
+      "true": Existing callers must change because a public interface, accepted input, or result shape changes.
+      "false": The visible change preserves the public contract, or evidence is insufficient to establish a break.
+  operational_risk:
+    type: score
+    goal: What level of operational impact is supported by the visible changes in `diff` and `files`?
+    criteria:
+      - Documentation or isolated cosmetic change with no apparent production behavior change.
+      - Localized behavior change with a limited apparent impact radius.
+      - Shared service, persistence, authentication, or deployment change with broad production impact.
