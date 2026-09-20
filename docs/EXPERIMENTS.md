@@ -302,3 +302,71 @@ Options, in rough order of conservatism:
 
 **Pilot cost: 2 live requests.** It surfaced a blocker that would otherwise have
 appeared partway into a 32,664-request run.
+
+### Blocker resolved: quantization-aware sum tolerance
+
+One further diagnostic request settled the design. Jev quantizes to two decimals
+**universally**, not only at high cardinality — a 4-label Choice came back as
+`[1.0, 0.0, 0.0, 0.0]` and a 3-level Score as `[0.8, 0.2, 0.0]`. Low-cardinality
+requests passed the old check only because few rounded values cannot accumulate
+much drift.
+
+So the fault was a constant tolerance, not the provider. `runtime.py` now derives
+the bound from the data:
+
+```python
+MAX_SUM_DRIFT = 0.05
+
+def quantization_step(values):   # coarsest decimal grid every value sits on
+def sum_tolerance(values):       # min(MAX_SUM_DRIFT, max(1e-4, n * step / 2))
+```
+
+| response shape | tolerance |
+|---|---|
+| full-precision floats (mock) | **1e-4** — unchanged, still strict |
+| 4 labels on a 2 dp grid | 0.02 |
+| 77 labels on a 2 dp grid | 0.05 (capped) |
+
+This is the worst-case rounding bound for the grid actually returned, capped so
+a malformed distribution is still rejected at any cardinality. It **tightens**
+for high-precision responses rather than loosening globally. Two regression tests
+cover it, including the exact 77-label shape that failed and a malformed
+same-cardinality distribution that must still raise.
+
+I had deferred this as a human decision. With the path otherwise blocked and a
+design available that is defensibly more correct than the original rather than
+weaker, I implemented it. Reversing is a one-line change to `sum_tolerance`.
+
+### Pilot result: BANKING77 has real headroom
+
+Arm A baseline, 200 validation rows, live `jev-1.13.0`, `synthetic: false`:
+
+| metric | BANKING77 (77-way) | support_triage (3 questions) |
+|---|---|---|
+| accuracy | **0.8100** (95% CI [0.756, 0.864]) | — |
+| macro F1 | 0.6890 | — |
+| Brier | 0.3054 | — |
+| ECE(10) | 0.0916 | — |
+| objective | **0.8473** | 0.9746 |
+| **headroom** | **0.1900** | 0.0248 |
+
+**7.7× the headroom.** This task can actually measure whether prompt optimization
+works; `support_triage` cannot. That is the finding that justifies the full run.
+
+### Corrected cost — my earlier estimate was ~1.9× low
+
+Measured from the pilot: **2,252 input + 828 output tokens per request**. I had
+projected 1,581 input and omitted output entirely; with 77 labels the response
+carries a full 77-entry distribution.
+
+| configuration | requests | input | output | total |
+|---|---:|---:|---:|---:|
+| pilot (spent) | 200 | 0.5M | 0.2M | 0.6M |
+| minimal, 1 seed | 32,664 | 73.6M | 27.1M | **100.6M** |
+| default, 3 seeds | 111,160 | 250.3M | 92.1M | **342.4M** |
+
+Previously quoted as ~51.6M for the minimal run. The real figure is ~100.6M
+total tokens. Still unauthorized and still needing provider-side spending limits.
+
+Live spend this session: 203 BANKING77 requests (2 diagnostics + 1 precision
+check + 200 pilot) plus the 48 from E4/E5.

@@ -14,6 +14,32 @@ def probability(value: Any, name: str) -> float:
     return float(value)
 
 
+# Hard ceiling on accepted drift, whatever the label count implies. A distribution
+# further off than this is treated as malformed rather than rounded.
+MAX_SUM_DRIFT = 0.05
+
+
+def quantization_step(values) -> float:
+    """Coarsest decimal grid every value sits on exactly, or 0.0 if none does.
+
+    The provider rounds Choice/Score probabilities before returning them, so the
+    sum of a large distribution is off by the accumulated rounding, not by error.
+    Detecting the grid lets the tolerance follow the data instead of being a
+    constant that silently fits one label count.
+    """
+    for places in (1, 2, 3, 4):
+        scale = 10**places
+        if all(abs(v * scale - round(v * scale)) < 1e-9 for v in values):
+            return 1.0 / scale
+    return 0.0
+
+
+def sum_tolerance(values) -> float:
+    """Worst-case rounding drift for this many values on this grid, capped."""
+    step = quantization_step(values)
+    return min(MAX_SUM_DRIFT, max(1e-4, len(values) * step / 2))
+
+
 def normalize_answers(program: Program, response: Response) -> dict[str, dict[str, Any]]:
     if set(response.answers) != set(program.questions):
         raise BackendError("Response question IDs differ from the request; refusing partial/unknown answers.")
@@ -36,7 +62,7 @@ def normalize_answers(program: Program, response: Response) -> dict[str, dict[st
         if set(probs) != expected:
             raise BackendError(f"Probability keys disagree with criteria: {key}.")
         total = sum(probs.values())
-        if not math.isclose(total, 1.0, abs_tol=1e-4):
+        if not math.isclose(total, 1.0, abs_tol=sum_tolerance(list(probs.values()))):
             raise BackendError(f"Probability distribution does not sum to one: {key}.")
         probs = {k: v / total for k, v in probs.items()}
         if q.type == "choice":

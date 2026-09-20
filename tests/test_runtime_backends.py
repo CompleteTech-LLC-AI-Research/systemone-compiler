@@ -1,7 +1,8 @@
 import sys
 import types
 import pytest
-from s1compiler.backends import AnswerCache, Budget, ManagedBackend, MockBackend, TypeSafeBackend
+from s1compiler.backends import (AnswerCache, Budget, ManagedBackend, MockBackend, Response,
+                                  TypeSafeBackend)
 from s1compiler.errors import BackendError, BudgetExceeded, ConfigurationError
 from s1compiler.models import Program
 from s1compiler.runtime import Runtime, apply_policy, normalize_answers
@@ -264,3 +265,67 @@ def test_cached_version_is_recorded(program, tmp_path):
     assert result["cache_hit"]
     assert second.accounting()["models_seen"] == [program.model]
     second.close()
+
+
+def test_sum_tolerance_follows_quantization_not_a_constant():
+    """Jev rounds probabilities to 2dp; drift scales with label count.
+
+    Observed live: a 77-label Choice summed to 0.99 (1e-2 off), which the old
+    fixed abs_tol=1e-4 rejected. The tolerance must track the returned grid,
+    stay tight for full-precision values, and still reject a malformed sum.
+    """
+    from s1compiler.runtime import MAX_SUM_DRIFT, quantization_step, sum_tolerance
+
+    # Full-precision values get the strict tolerance.
+    assert quantization_step([0.14173942690489524, 0.8582605730951048]) == 0.0
+    assert sum_tolerance([0.14173942690489524, 0.8582605730951048]) == 1e-4
+
+    # Two-decimal grid, as the provider actually returns.
+    assert quantization_step([0.93, 0.02, 0.02, 0.0]) == 0.01
+    assert sum_tolerance([0.93, 0.02, 0.02, 0.0]) == pytest.approx(0.02)
+
+    # Large label counts are capped rather than growing without bound.
+    assert sum_tolerance([0.01] * 77) == MAX_SUM_DRIFT
+
+
+def test_high_cardinality_quantized_choice_is_accepted(program):
+    """The real 77-label shape that blocked the BANKING77 pilot."""
+    from s1compiler.models import Program
+    from s1compiler.runtime import Runtime
+
+    labels = [f"label_{i}" for i in range(77)]
+    data = program.model_dump(mode="json")
+    data["decisions"] = {"intent": {"type": "choice", "goal": "Pick one.",
+                                    "criteria": {name: f"Definition {name}." for name in labels}}}
+    data["questions"] = {"intent": {"type": "choice", "instructions": {"question": "Pick one."},
+                                    "criteria": {name: f"Definition {name}." for name in labels}}}
+    data["bindings"] = {"intent": {"kind": "question", "question": "intent"}}
+    data["policies"] = {"intent": {}}
+    wide = Program.model_validate(data)
+
+    # 0.93 + 0.02 + 0.02 + 74 zeros = 0.97 on a 2dp grid: rounded, not malformed.
+    probs = {name: 0.0 for name in labels}
+    probs[labels[0]], probs[labels[1]], probs[labels[2]] = 0.93, 0.02, 0.02
+    answers = {"intent": {"type": "choice", "choice": labels[0],
+                          "probabilities": probs, "confidence": 0.9}}
+
+    class Replay:
+        identity, synthetic = "typesafe-sdk/0.7.0", False
+        def evaluate(self, program, state):
+            return Response(answers=answers, model=program.model, usage={})
+        def close(self):
+            pass
+
+    result = Runtime(wide, ManagedBackend(Replay(), max_calls=2, cache=None)).run(
+        {k: "x" for k in wide.state})
+    assert result["decisions"]["intent"]["value"] == labels[0]
+    # Renormalized to a true distribution.
+    assert sum(result["decisions"]["intent"]["probabilities"].values()) == pytest.approx(1.0)
+
+    # A genuinely malformed sum is still rejected at the same cardinality.
+    broken = dict(probs)
+    broken[labels[0]] = 0.40
+    answers["intent"]["probabilities"] = broken
+    with pytest.raises(BackendError, match="sum to one"):
+        Runtime(wide, ManagedBackend(Replay(), max_calls=2, cache=None)).run(
+            {k: "x" for k in wide.state})
