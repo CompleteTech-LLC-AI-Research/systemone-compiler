@@ -3,9 +3,10 @@
 Started 2026-09-19. Records experiments actually executed against this package,
 with their raw outputs, and a prioritized backlog of proposed ones.
 
-Every result below used the **synthetic `mock-lexical/v1` fixture**. None is a
-Jev measurement. No claim of real prompt-quality improvement is made anywhere in
-this file.
+**E1-E3 and the BANKING77 section used the synthetic `mock-lexical/v1` fixture
+and are not Jev measurements. E4 and E5 are real `jev-1.13.0` measurements** (48
+live requests, operator-authorized). No claim of real prompt-quality improvement
+is made anywhere in this file; E4 in fact measures the improvement as negligible.
 
 Raw outputs: `runs/experiments/`. Source run under analysis:
 `runs/live-teacher-001/` (real DSPy teacher `openai/cinf/deepseek-v4.1-flash`,
@@ -191,3 +192,53 @@ the two structural limits E1/E3 established: the fixture reads criteria only, an
 its Score question is degenerate. Both are properties of the bundled fixture, not
 defects in the compiler — but without them stated, a mock run looks like it
 evaluates the whole program when it evaluates roughly half of it.
+
+---
+
+## BANKING77 harness — validated on mock, live run costed but not authorized
+
+The `banking77` module (authored outside this session) was reviewed and exercised
+end to end. It is the E9 dataset scale-up, and it is the right vehicle: E4/E5
+showed `support_triage` is saturated on Jev (0.9746 baseline, 0.0248 headroom),
+so that task cannot measure optimization at all.
+
+**Dataset prepared** — pinned commit `57ec275d…`, both CSV checksums verified:
+5,969 train / 1,998 validation / 2,036 calibration / 3,080 test.
+
+**Design.** Four arms: `A` authored baseline, `B` one-pass rewrite with no
+validation selection, `C` GEPA search, `D` independent restarts selected on
+validation at matched budget. **D is the control most prompt-optimization work
+omits** — it isolates whether GEPA's reflective search beats plain best-of-N at
+equal spend. Paired bootstrap with Bonferroni across the three comparisons.
+
+**Mock select + test completed** (12,320 evaluation requests, ~22s total).
+Guards verified in practice: re-running `test` into a used directory refuses
+("Choose a fresh result directory"); live `select` refuses without both
+`--allow-paid` and `--acknowledge-budget-limits`, and additionally requires
+`--share-feedback` plus an explicit `--teacher-model`.
+
+Mock result — **all four arms identical, every delta exactly 0.0**, because mock
+mode substitutes `IdentityTeacher`. This validates plumbing only; it is not a
+null result about optimization.
+
+| arm | accuracy | macro F1 | Brier |
+|---|---|---|---|
+| A / B-7 / C-7 / D-7 | 0.3166 | 0.3166 | 0.8816 |
+
+Worth noting: the lexical fixture reaches 31.7% on a 77-way task where chance is
+1.3%. Unlike `support_triage`, this task is **nowhere near ceiling**, so a live
+run would have real headroom to measure.
+
+### Live cost — requires an explicit decision
+
+Baseline prompt is 6,324 chars (~1,581 tokens) per request.
+
+| configuration | requests | ~input tokens |
+|---|---:|---:|
+| minimal, 1 seed | 32,664 | ~51.6M |
+| default, 3 seeds | 111,160 | ~175.7M |
+
+For scale, E4/E5 together were 48 requests and 43.5k input tokens. The minimal
+configuration is roughly **1,000×** that. The package deliberately provides no
+dollar estimator and reports `dollar_cost: null`; set provider-side spending
+limits before authorizing either configuration.
