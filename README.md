@@ -26,6 +26,10 @@ For the real-data DSPy/Jev prompt-engineering study, see
 [the BANKING77 experiment protocol](docs/BANKING77_EXPERIMENT.md). Its prepare,
 select, freeze/review, and test phases keep mock checks separate from live results.
 
+The [multi-benchmark research suite](docs/RESEARCH_BENCHMARKS.md) adds BoolQ,
+SST-5, CLINC150, GoEmotions, and ANLI, with audited data preparation, preregistered
+comparisons, paired cluster inference, replayable evidence, and publication figures.
+
 Requires Python 3.11 or newer. The base install needs Pydantic and PyYAML; it does
 not need a TypeSafe account, DSPy, GEPA, or an optimizer model.
 
