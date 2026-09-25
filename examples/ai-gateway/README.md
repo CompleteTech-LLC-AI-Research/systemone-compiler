@@ -90,3 +90,13 @@ worker. Telemetry and reports contain only aggregate accounting.
 - [OpenCode Zen](https://opencode.ai/docs/zen/)
 - [Classifier native compatibility and quotas](https://classifier.dev/)
 - [Pollinations model catalog](https://gen.pollinations.ai/text/models)
+
+### Calibration recovery
+
+`make_calibration_backend(limit, launch)` uses only native TypeSafe while retaining
+the eight-worker limit and the original attempt ceiling. A calibration allowance
+equal to its row count has no spare attempts for retries. If exhausted,
+`calibration_budget_exhausted` identifies only that phase and exact exhaustion;
+the runner must retain the selected program, mark the arm incomplete without a
+score, and continue other arms. It must not silently refill budgets or count a
+partial calibration as complete.

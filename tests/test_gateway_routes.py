@@ -228,3 +228,28 @@ def test_continuous_dispatch_refills_before_slowest_finishes():
             assert future.result(timeout=5) == list(range(16))
     finally:
         backend.close()
+
+
+def test_only_exhausted_calibration_is_deferred():
+    backend = SimpleNamespace(budget=SimpleNamespace(used=10, maximum=10))
+    assert r.calibration_budget_exhausted(BudgetExceeded("fixture"), "calibration", backend)
+    assert not r.calibration_budget_exhausted(BudgetExceeded("fixture"), "selection", backend)
+    assert not r.calibration_budget_exhausted(BackendError("fixture"), "calibration", backend)
+    backend.budget.used = 9
+    assert not r.calibration_budget_exhausted(BudgetExceeded("fixture"), "calibration", backend)
+
+
+def test_calibration_factory_uses_only_native_and_keeps_budget(tmp_path):
+    from s1compiler.backends import MockBackend
+
+    launch = SimpleNamespace(
+        make_backend=lambda paid, n: ManagedBackend(MockBackend(), max_calls=n, cache=None)
+    )
+    backend = r.make_calibration_backend(13, launch)
+    try:
+        assert backend.budget.maximum == 13
+        assert list(backend.configs) == ["direct"]
+        assert backend.workers == 8
+    finally:
+        backend.launch = None
+        backend.close()
