@@ -196,3 +196,35 @@ def test_weighted_sliding_minute_limit(tmp_path):
     now[0] += 1
     assert s.take_ready(11) is None
     assert s.take_ready(10) == "classifier"
+
+
+def test_http_520_is_transient():
+    assert r.failure(r.HTTPFailure(httpx.Response(520)))[0] is True
+
+
+def test_continuous_dispatch_refills_before_slowest_finishes():
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    release = threading.Event()
+    refilled = threading.Event()
+    configs = {"fixture": {"concurrency": 8, "interval": 0.001, "group": "fixture"}}
+    backend = r.PacedBackend(20, None, configs, r.Scheduler(configs), {})
+
+    def work(index):
+        if index == 0:
+            assert release.wait(5)
+        if index == 8:
+            refilled.set()
+        return index
+
+    try:
+        with ThreadPoolExecutor(max_workers=1) as observer:
+            future = observer.submit(backend.map, work, range(16))
+            try:
+                assert refilled.wait(2), "A completed slot was not refilled while request zero waited"
+            finally:
+                release.set()
+            assert future.result(timeout=5) == list(range(16))
+    finally:
+        backend.close()
