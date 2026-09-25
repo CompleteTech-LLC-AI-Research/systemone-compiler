@@ -417,3 +417,28 @@ def make_backend(limit, launch):
                 Native(name, c, key), max_calls=n, cache=None
             )
     return PacedBackend(limit, launch, configs, _scheduler, factories)
+
+
+def calibration_budget_exhausted(exc, phase, backend):
+    from s1compiler.errors import BudgetExceeded
+
+    return (
+        phase == "calibration"
+        and isinstance(exc, BudgetExceeded)
+        and backend is not None
+        and backend.budget.used == backend.budget.maximum
+    )
+
+
+_calibration_scheduler = None
+
+
+def make_calibration_backend(limit, launch):
+    """Keep exact calibration attempt ceilings; avoid throttled gateway routes."""
+    global _calibration_scheduler
+    configs = {"direct": {"concurrency": 8, "interval": 0.05, "group": "direct"}}
+    if _calibration_scheduler is None:
+        _calibration_scheduler = Scheduler(configs)
+    return PacedBackend(
+        limit, launch, configs, _calibration_scheduler, {"direct": lambda n: launch.make_backend(True, n)}
+    )
