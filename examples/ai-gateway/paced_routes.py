@@ -58,7 +58,7 @@ def failure(exc):
                 milliseconds = retry_after(headers.get("retry-after-ms"))
                 if milliseconds is not None:
                     delay = max(delay or 0, milliseconds / 1000)
-            return status in {408, 429, 500, 502, 503, 504, 529}, delay, status
+            return status in {408, 429, 500, 502, 503, 504, 520, 529}, delay, status
         if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError)) or type(exc).__name__ in {
             "TypeSafeAPITimeoutError",
             "TypeSafeAPIConnectionError",
@@ -243,6 +243,45 @@ class PacedBackend(RoutedParallel):
     def close(self):
         super().close()
         self.telemetry(final=True)
+
+    def map(self, fn, rows):
+        from concurrent.futures import wait, FIRST_COMPLETED
+
+        iterator = iter(enumerate(rows))
+        pending = {}
+        results = {}
+
+        def submit_next():
+            item = next(iterator, None)
+            if item is None:
+                return False
+            index, row = item
+            pending[self.pool.submit(fn, row)] = index
+            return True
+
+        for _ in range(self.workers):
+            if not submit_next():
+                break
+        while pending:
+            completed, _ = wait(pending, return_when=FIRST_COMPLETED)
+            errors = []
+            for future in completed:
+                index = pending.pop(future)
+                try:
+                    results[index] = future.result()
+                except Exception as exc:
+                    errors.append(exc)
+            if errors:
+                # Drain already-reserved work; never enqueue after observed failure.
+                for future in pending:
+                    try:
+                        future.result()
+                    except Exception:
+                        pass
+                raise errors[0]
+            for _ in completed:
+                submit_next()
+        return [results[index] for index in range(len(results))]
 
     def route_client(self, name):
         if not hasattr(self.local, "routes"):
