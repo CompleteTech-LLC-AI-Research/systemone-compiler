@@ -1,0 +1,3 @@
+{"expected": {"risk": 0}, "group": "pr_risk_calibration_group_0", "id": "pr_risk_calibration_0", "state": {"diff": "documentation routine low calibration fixture 0", "files": ["docs/README.md"]}}
+{"expected": {"risk": 1}, "group": "pr_risk_calibration_group_1", "id": "pr_risk_calibration_1", "state": {"diff": "localized service medium calibration fixture 1", "files": ["src/service.py"]}}
+{"expected": {"risk": 2}, "group": "pr_risk_calibration_group_2", "id": "pr_risk_calibration_2", "state": {"diff": "public interface removed breaking urgent shared authentication deployment calibration fixture 2", "files": ["src/api.py"]}}

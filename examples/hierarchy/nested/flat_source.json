@@ -1,0 +1,44 @@
+{
+  "decisions": {
+    "first_review": {
+      "criteria": {
+        "false": "routine request no risk",
+        "true": "urgent outage confirmed risk"
+      },
+      "goal": "Does this note need human review?",
+      "score_tolerance": 0.5,
+      "type": "noul",
+      "weight": 1.0
+    },
+    "second_review": {
+      "criteria": {
+        "false": "routine request no risk",
+        "true": "urgent outage confirmed risk"
+      },
+      "goal": "Does this note need human review?",
+      "score_tolerance": 0.5,
+      "type": "noul",
+      "weight": 1.0
+    }
+  },
+  "description": "Synthetic software example; no external action authority.",
+  "model": "jev-1.13.0",
+  "name": "nested_reuse",
+  "state": {
+    "first_note": {
+      "description": "First synthetic note",
+      "required": true,
+      "type": "string"
+    },
+    "second_enabled": {
+      "description": "Whether to run the second reusable check",
+      "required": true,
+      "type": "boolean"
+    },
+    "second_note": {
+      "description": "Second synthetic note",
+      "required": false,
+      "type": "string"
+    }
+  }
+}

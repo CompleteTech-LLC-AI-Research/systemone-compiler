@@ -1,0 +1,133 @@
+{
+  "format": "systemone-synthetic-example-traces/v1",
+  "graph_sha256": "92dc94bf70dbc5f7642cc6709b440560c45f24139113b499e0cc7e2239245b1f",
+  "provenance": {
+    "deployment_approved": false,
+    "status": "draft",
+    "synthetic_fixture": true
+  },
+  "source_to_nodes": {
+    "check_note:check": [
+      "first/check",
+      "second/check"
+    ]
+  },
+  "traces": [
+    {
+      "case": null,
+      "id": "nested_train_0",
+      "path": [
+        "first/check",
+        "first",
+        "second/check",
+        "second"
+      ],
+      "review": {
+        "first_review": false,
+        "second_review": false
+      },
+      "stage_status": {
+        "first": "completed",
+        "first/check": "completed",
+        "second": "completed",
+        "second/check": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "first_review": true,
+        "second_review": false
+      }
+    },
+    {
+      "case": null,
+      "id": "nested_train_1",
+      "path": [
+        "first/check",
+        "first",
+        "second/check",
+        "second"
+      ],
+      "review": {
+        "first_review": false,
+        "second_review": false
+      },
+      "stage_status": {
+        "first": "completed",
+        "first/check": "completed",
+        "second": "completed",
+        "second/check": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "first_review": false,
+        "second_review": true
+      }
+    },
+    {
+      "case": null,
+      "id": "nested_train_2",
+      "path": [
+        "first/check",
+        "first"
+      ],
+      "review": {
+        "first_review": true
+      },
+      "stage_status": {
+        "first": "completed",
+        "first/check": "completed",
+        "second": "skipped",
+        "second/check": "skipped"
+      },
+      "status": "review_required",
+      "synthetic": true,
+      "values": {
+        "first_review": true
+      }
+    },
+    {
+      "case": "default_second_note",
+      "id": "nested_train_3",
+      "path": [
+        "first/check",
+        "first",
+        "second/check",
+        "second"
+      ],
+      "review": {
+        "first_review": false,
+        "second_review": false
+      },
+      "stage_status": {
+        "first": "completed",
+        "first/check": "completed",
+        "second": "completed",
+        "second/check": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "first_review": true,
+        "second_review": false
+      }
+    },
+    {
+      "error_type": "BudgetExceeded",
+      "id": "nested_budget_exhaustion",
+      "path": [
+        "first/check",
+        "first"
+      ],
+      "stage_status": {
+        "first": "completed",
+        "first/check": "completed",
+        "second": "failed",
+        "second/check": "failed"
+      },
+      "status": "failed",
+      "synthetic": true
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{"expected": {"resolution": "refund"}, "group": "support_validation_group_0", "id": "support_validation_0", "state": {"message": "refund invoice charge duplicated validation fixture 0"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_validation_group_1", "id": "support_validation_1", "state": {"message": "software crash bug urgent validation fixture 1"}}
+{"expected": {"resolution": "general"}, "group": "support_validation_group_2", "id": "support_validation_2", "state": {"message": "software setup help instructions validation fixture 2"}}
+{"expected": {"resolution": "sales_followup"}, "group": "support_validation_group_3", "id": "support_validation_3", "state": {"message": "sales pricing plan inquiry validation fixture 3"}}
+{"expected": {"resolution": "general"}, "group": "support_validation_group_4", "id": "support_validation_4", "state": {"message": "press partnership other validation fixture 4"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_validation_group_5", "id": "support_validation_5", "state": {"message": "refund invoice charge actual crash validation fixture 5"}}

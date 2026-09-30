@@ -1,0 +1,52 @@
+[
+  {
+    "message": "refund invoice charge duplicated",
+    "path": [
+      "router",
+      "billing"
+    ],
+    "resolution": "refund"
+  },
+  {
+    "message": "software crash bug urgent",
+    "path": [
+      "router",
+      "technical_triage",
+      "technical_fix"
+    ],
+    "resolution": "bug_fix"
+  },
+  {
+    "message": "software setup help instructions",
+    "path": [
+      "router",
+      "technical_triage",
+      "technical_help"
+    ],
+    "resolution": "general"
+  },
+  {
+    "message": "sales pricing plan inquiry",
+    "path": [
+      "router",
+      "sales"
+    ],
+    "resolution": "sales_followup"
+  },
+  {
+    "message": "press partnership other",
+    "path": [
+      "router"
+    ],
+    "resolution": "general"
+  },
+  {
+    "case": "incorrect_router",
+    "message": "refund invoice charge actual crash",
+    "path": [
+      "router",
+      "billing"
+    ],
+    "resolution": "bug_fix"
+  }
+]
