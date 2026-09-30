@@ -23,9 +23,14 @@ With `HierarchyCompileOptions(architect="dspy", structural_rounds=1..10)`, an
 explicitly configured `DSPyTeacher` may propose bounded structure from train
 examples and sealed train traces. Each complete graph is validated and scored on
 validation before acceptance. Rejected JSON or graph data leaves the prior
-candidate intact; provider and budget failures propagate. Text optimization is
-separate and follows structure selection. Teacher uploads require separate
-sharing consent, and this offline source release makes none by default.
+candidate intact; provider and budget failures propagate. With
+`optimizer="gepa"`, GEPA edits only qualified child question text after structure
+selection. It evaluates each candidate through the complete graph on train or
+validation roots. Its metric-call budget counts root evaluations; the shared
+`ManagedBackend` separately counts every native stage call. The compiler
+rechecks selected wording on validation, then calibrates and freezes it before
+the single test phase. Teacher uploads require separate sharing consent, and
+this offline source release makes none by default.
 
 The proposal output contains only `definitions` and `graph`. The compiler copies
 the root source contract, model and graph limits; generated text is never run as
@@ -48,3 +53,10 @@ occurs only afterward, and a session permits one held-out phase.
 The report uses the same root-level objective for paired flat and hierarchy
 comparison. Its synthetic status does not imply real Jev quality or deployment
 approval. A measured artifact still requires independent acceptance before use.
+
+`components_from_hierarchy` and `hierarchy_from_components` address text by
+qualified expanded stage and question ID. This lets two instances of a reused
+definition receive different text without changing sibling stages. A changed
+text candidate becomes a draft artifact requiring semantic review and final
+policy recalibration. `optimize_hierarchy_gepa` uses installed GEPA with a
+train-only reflective dataset and no checkpoint loading or tracking.

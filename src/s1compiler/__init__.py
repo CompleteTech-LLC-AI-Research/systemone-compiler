@@ -2,6 +2,8 @@
 from .models import UseCase, Program, Decision, StateField
 from .hierarchy import HierarchySource, HierarchyArtifact, FinalReviewGate, lower_hierarchy, load_artifact
 from .hierarchy_compiler import HierarchyCompiler, HierarchyCompileOptions
+from .hierarchy_gepa import (components_from_hierarchy, hierarchy_from_components,
+                             optimize_hierarchy_gepa)
 from .hierarchy_validation import (validate_hierarchy_artifact, validate_hierarchy_source,
                                    validate_hierarchy_compile_inputs)
 from .hierarchy_runtime import HierarchyRuntime
@@ -14,6 +16,7 @@ __version__ = "0.1.0"
 __all__ = ["UseCase", "Program", "Decision", "StateField", "Runtime", "Compiler", "CompileOptions",
            "HierarchySource", "HierarchyArtifact", "FinalReviewGate", "lower_hierarchy", "load_artifact",
            "HierarchyCompiler", "HierarchyCompileOptions",
+           "components_from_hierarchy", "hierarchy_from_components", "optimize_hierarchy_gepa",
            "validate_hierarchy_artifact", "validate_hierarchy_source", "validate_hierarchy_compile_inputs",
            "HierarchyRuntime", "HierarchyExample", "IntermediateAnnotation",
            "HierarchySplitGuard", "HierarchyTeacherInputs", "read_hierarchy_jsonl"]
