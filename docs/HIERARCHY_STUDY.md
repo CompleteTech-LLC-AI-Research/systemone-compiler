@@ -61,9 +61,10 @@ dataset, an attested test origin, a reviewer, and two SHA256 exclusion lists in
 `--data-attestation`: `prior_test_input_sha256s` for whole projected states and
 `prior_test_text_sha256s` for nonempty string values in prior holdout inputs.
 Set `prior_test_text_normalization` to `casefold_whitespace_v1` (Unicode
-casefold, then collapse whitespace). The software checks exact projected-input,
-normalized-text, and cross-split group leakage, including text nested in a
-declared input. It stores list digests and counts rather than the hash lists in
+casefold, then collapse whitespace). The software checks exact projected-input
+and normalized-text overlap against every train, validation, calibration, and
+test row, including text nested in a declared input. It also checks cross-split
+group leakage. It stores list digests and counts rather than the hash lists in
 the protocol. Hashes can expose low-entropy values; keep the lists local. These
 checks do not establish semantic independence or replace human near-duplicate
 review, and the attestation itself still needs human review.

@@ -212,13 +212,13 @@ def register(source_path: str | Path, candidate_path: str | Path, flat_path: str
             selected_method != "dspy_gepa" or not teacher_model):
             raise ConfigurationError("Live registration needs reviewed independent labels, teacher, "
                                      "and exact-state plus normalized-text holdout exclusions.")
-        projected = [project_state(source.source.state, row.state) for row in splits["test"]]
-        test_inputs = {fingerprint(state) for state in projected}
-        if test_inputs & set(exclusions):
-            raise DataError("Live hierarchy test input overlaps an excluded prior-study holdout.")
+        projected = [project_state(source.source.state, row.state)
+                     for split in SPLITS for row in splits[split]]
+        if {fingerprint(state) for state in projected} & set(exclusions):
+            raise DataError("Live hierarchy input overlaps an excluded prior-study holdout.")
         text_exclusion_set = set(text_exclusions)
         if any(_normalized_text_fingerprints(state) & text_exclusion_set for state in projected):
-            raise DataError("Live hierarchy test text overlaps an excluded prior-study holdout.")
+            raise DataError("Live hierarchy text overlaps an excluded prior-study holdout.")
         attestation = {**attestation, "prior_test_input_sha256s": None,
                        "prior_test_text_sha256s": None,
                        "prior_test_exclusion_digest": fingerprint(sorted(set(exclusions))),

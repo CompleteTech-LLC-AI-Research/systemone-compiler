@@ -67,10 +67,11 @@ def test_live_registration_requires_independent_labels_and_billing_caps(tmp_path
     assert not (tmp_path / "live.json").exists()
 
 
-def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path):
+@pytest.mark.parametrize("split", SPLITS)
+def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path, split):
     # This metadata is a test double; the checked-in labels remain synthetic.
     from s1compiler.io import fingerprint
-    first = json.loads(SPLITS["test"].read_text(encoding="utf-8").splitlines()[0])
+    first = json.loads(SPLITS[split].read_text(encoding="utf-8").splitlines()[0])
     message = first["state"]["message"]
     prior_state = {"text": message}  # Old study has a different public input field.
     assert fingerprint(prior_state) != fingerprint(first["state"])
@@ -81,19 +82,48 @@ def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path):
                    "prior_test_text_normalization": "casefold_whitespace_v1",
                    "prior_test_text_sha256s": [fingerprint(" ".join(message.casefold().split()))]}
     output = tmp_path / "unregistered.json"
-    with pytest.raises(DataError, match="test text overlaps"):
+    with pytest.raises(DataError, match="text overlaps"):
         register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
                  SPLITS, output, study_id="test_only_cross_schema_overlap", mode="typesafe",
                  selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=16,
                  teacher_max_calls=3, teacher_model="test-only/model", data_attestation=attestation)
     assert not output.exists()
+
+
+@pytest.mark.parametrize("split", SPLITS)
+def test_live_registration_rejects_exact_prior_holdout_in_any_split(tmp_path, split):
+    # Test-only exclusion metadata; the source labels remain synthetic.
+    from s1compiler.io import fingerprint
+    row = json.loads(SPLITS[split].read_text(encoding="utf-8").splitlines()[0])
+    attestation = {"label_origin": "independent_human_reviewed",
+                   "test_independence_evidence": "test-only-review-record",
+                   "reviewer": "test-only-reviewer",
+                   "prior_test_input_sha256s": [fingerprint(row["state"])],
+                   "prior_test_text_normalization": "casefold_whitespace_v1",
+                   "prior_test_text_sha256s": [fingerprint("test-only unrelated")]}
+    output = tmp_path / "unregistered.json"
+    with pytest.raises(DataError, match="input overlaps"):
+        register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+                 SPLITS, output, study_id="test_only_exact_overlap", mode="typesafe",
+                 selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=16,
+                 teacher_max_calls=3, teacher_model="test-only/model", data_attestation=attestation)
+    assert not output.exists()
+
+
+def test_live_registration_requires_normalized_text_exclusions(tmp_path):
+    from s1compiler.io import fingerprint
+    attestation = {"label_origin": "independent_human_reviewed",
+                   "test_independence_evidence": "test-only-review-record",
+                   "reviewer": "test-only-reviewer",
+                   "prior_test_input_sha256s": [fingerprint({"text": "test-only unrelated"})],
+                   "prior_test_text_normalization": "casefold_whitespace_v1"}
+    output = tmp_path / "unregistered.json"
     with pytest.raises(ConfigurationError, match="normalized-text holdout exclusions"):
         register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
                  SPLITS, output, study_id="test_only_missing_text_exclusions", mode="typesafe",
                  selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=16,
                  teacher_max_calls=3, teacher_model="test-only/model",
-                 data_attestation={key: value for key, value in attestation.items()
-                                   if key != "prior_test_text_sha256s"})
+                 data_attestation=attestation)
     assert not output.exists()
 
 
