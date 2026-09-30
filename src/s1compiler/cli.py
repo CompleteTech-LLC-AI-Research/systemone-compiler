@@ -13,6 +13,7 @@ from .compiler import CompileOptions, Compiler, versions
 from .data import read_jsonl
 from .errors import ConfigurationError, S1Error
 from .hardening import propose_cases
+from .hierarchy import HierarchyArtifact, HierarchySource
 from .io import atomic_json, load_document
 from .metrics import evaluate
 from .models import Program, UseCase, project_state
@@ -246,6 +247,8 @@ def dispatch(args):
         args.out.mkdir(parents=True, exist_ok=True)
         atomic_json(args.out / "usecase.schema.json", UseCase.model_json_schema())
         atomic_json(args.out / "program.schema.json", Program.model_json_schema())
+        atomic_json(args.out / "hierarchy-source.schema.json", HierarchySource.model_json_schema())
+        atomic_json(args.out / "hierarchy-artifact.schema.json", HierarchyArtifact.model_json_schema())
         print(f"Schemas saved: {args.out}")
     elif args.command == "export-playground":
         program = Program.load(args.artifact)

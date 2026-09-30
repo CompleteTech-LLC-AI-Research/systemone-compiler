@@ -153,6 +153,10 @@ YAML.
 
 ## Commands
 
+The [hierarchy artifact guide](docs/HIERARCHY_ARTIFACTS.md) documents the
+versioned source/frozen graph schemas, portable local-definition expansion,
+integrity hashes, and current implementation boundary.
+
 | Command | Purpose |
 |---|---|
 | `s1 init my-use-case` | Create a starter with an editable spec and synthetic data. |
