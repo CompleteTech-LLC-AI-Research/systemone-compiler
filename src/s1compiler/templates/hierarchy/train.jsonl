@@ -1,0 +1,3 @@
+{"id":"train_0","group":"train_group_0","state":{"message":"train refund synthetic ticket 0"},"expected":{"resolution":"refund"}}
+{"id":"train_1","group":"train_group_1","state":{"message":"train bug_fix synthetic ticket 1"},"expected":{"resolution":"bug_fix"}}
+{"id":"train_2","group":"train_group_2","state":{"message":"train general synthetic ticket 2"},"expected":{"resolution":"general"}}

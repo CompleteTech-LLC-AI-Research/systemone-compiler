@@ -1,0 +1,3 @@
+{"id":"calibration_0","group":"calibration_group_0","state":{"message":"calibration refund synthetic ticket 0"},"expected":{"resolution":"refund"}}
+{"id":"calibration_1","group":"calibration_group_1","state":{"message":"calibration bug_fix synthetic ticket 1"},"expected":{"resolution":"bug_fix"}}
+{"id":"calibration_2","group":"calibration_group_2","state":{"message":"calibration general synthetic ticket 2"},"expected":{"resolution":"general"}}
