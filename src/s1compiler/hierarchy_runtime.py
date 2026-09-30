@@ -150,7 +150,7 @@ class HierarchyRuntime:
                         self.backend.budget.used = prior_used
                 if evidence.final is not None:
                     stored = evidence.final["result"]
-                    fields = ("format", "graph_sha256", "model", "synthetic", "status",
+                    fields = ("format", "graph_sha256", "model", "backend", "synthetic", "status",
                               "decisions", "stages", "executed", "path", "lineage")
                     if any(result.get(field) != stored.get(field) for field in fields) or (
                         set(evidence.stages) != set(result["executed"])
@@ -220,6 +220,7 @@ class HierarchyRuntime:
             "format": "systemone-hierarchy-result/v1",
             "graph_sha256": self.artifact.content_hash,
             "model": self.artifact.source.model,
+            "backend": self.backend.identity,
             "synthetic": self.backend.synthetic,
             "status": status,
             "decisions": decisions,
@@ -453,6 +454,7 @@ class HierarchyRuntime:
             try:
                 projected = project_state(ports, mapped)
                 stages[name] = {"status": "running"}
+                leaf_observed = {}
                 if isinstance(stage, LoweredNode):
                     if lineage is not None:
                         lineage.validate_stage(stage, projected, values)
@@ -462,6 +464,8 @@ class HierarchyRuntime:
                     values[name] = response["decisions"]
                     executed.append(name)
                     review = any(item["review_required"] for item in response["decisions"].values())
+                    leaf_observed = {"native_latency_ms": response["latency_ms"],
+                                     "cache_hit": response["cache_hit"], "usage": response["usage"]}
                 else:
                     outputs, review = self._run_scope(name + "/", stage.outputs, root, values, stages,
                                                       executed, path, cancel_requested, deadline, ledger, evidence,
@@ -473,7 +477,8 @@ class HierarchyRuntime:
                 review = review or any(stages.get(dep, {}).get("review_required", False)
                                        for dep in lineage_deps)
                 stages[name] = {"status": "completed", "review_required": review,
-                                "kind": "leaf" if isinstance(stage, LoweredNode) else "subgraph"}
+                                "kind": "leaf" if isinstance(stage, LoweredNode) else "subgraph",
+                                **leaf_observed}
                 path.append(name)
             except (BackendError, BudgetExceeded, ConfigurationError, DataError) as exc:
                 stages[name] = {"status": "failed", "reason": type(exc).__name__}
