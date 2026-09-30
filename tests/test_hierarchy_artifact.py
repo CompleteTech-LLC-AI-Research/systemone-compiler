@@ -163,7 +163,7 @@ def test_unsafe_definition_reference_rejected(bad):
 def test_unbound_subgraph_input_cannot_fall_through_to_root():
     data = json.loads((FIXTURES / "nested.json").read_text(encoding="utf-8"))
     data["definitions"]["check_note"]["stages"][0]["inputs"]["note"] = {"root": "first_note"}
-    with pytest.raises(DataError, match="Unbound subgraph input"):
+    with pytest.raises(DataError, match="undeclared root input"):
         lower_hierarchy(HierarchySource.model_validate(data))
 
 
