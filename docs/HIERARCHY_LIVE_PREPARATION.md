@@ -51,6 +51,14 @@ produces calibrated frozen graph digests for the final live manifest; its exact
 frozen identity and semantic changes need review before held-out execution.
 Do not relabel the pending attestation or draft as approved, frozen, or measured.
 
+After registration, `s1-study manifest` writes the complete pre-spend live
+manifest, including the teacher endpoint resolved from `S1_TEACHER_API_BASE`
+at that moment, with no provider calls. Complete its `review_template` with the
+rechecked quotes, the enforced cap, and the consents, then bind it with
+`s1-study review`. Live selection refuses to start unless `--reviewed-manifest`
+matches the protocol, the current software parameters, and the same teacher
+endpoint. See [the study guide](HIERARCHY_STUDY.md) for the exact commands.
+
 ## Prepared proposal for issue #20
 
 The 2026-09-30 local preparation retained 14,960 rows: 10,451 train, 917

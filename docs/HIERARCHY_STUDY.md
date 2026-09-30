@@ -81,7 +81,7 @@ anonymization.
 Registering a live protocol makes **zero** provider calls. So does
 `s1-study manifest --protocol <protocol> --out <manifest>`, which writes the
 complete pre-spend live manifest: pinned Jev model, native SDK identity with
-retries disabled, teacher model and provider ceilings, selection method, seeds,
+retries disabled, teacher model, endpoint, and provider ceilings, selection method, seeds,
 calibration minimums, per-arm call ceilings, price caps and worst-case spend,
 dataset digests, the redacted independence attestation, the exact `select` and
 `test` commands, and a `review_template`. It refuses mock protocols and any
@@ -98,8 +98,9 @@ digest, and it authorizes nothing by itself.
 Live selection then requires separate `--allow-paid`, `--share-feedback`, an
 exact `--approved-protocol-sha256`, and `--reviewed-manifest`. Before any
 provider or teacher object is built, it regenerates the manifest from the
-protocol and current code and refuses to run if anything differs from what was
-reviewed, so a live run cannot change an unspecified parameter. It then creates
+protocol, current code, and the current teacher endpoint, and refuses to run if
+anything differs from what was reviewed, so a live run cannot change an
+unspecified parameter. It then creates
 frozen graph digests and `live-manifest.json`, which records the reviewed
 manifest digest and marks the held-out test and semantic review as unapproved.
 Live held-out test requires another explicit paid approval,

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import random
 import re
@@ -378,13 +379,16 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
                     "signature_ceiling": optimization["teacher_max_calls"],
                     "provider_request_ceiling": protocol["budgets"]["teacher_provider_request_ceiling"],
                     "max_tokens": optimization["teacher_max_tokens"],
+                    # The endpoint decides provider and price, so it is pinned here and
+                    # re-resolved at selection; the credential itself is never recorded.
+                    "api_base": os.environ.get("S1_TEACHER_API_BASE") or "provider_default",
                     "temperature": "provider_default",
                     "request_timeout_s": teacher_defaults["timeout"].default,
                     "max_prompt_chars": teacher_defaults["max_prompt_chars"].default,
                     "framework_caches": "disabled",
                     "sdk_retries": 0,
-                    "credentials": {"environment_variables": ["S1_TEACHER_API_KEY", "S1_TEACHER_API_BASE"],
-                                    "recorded_in_manifest": False}},
+                    "credential": {"environment_variable": "S1_TEACHER_API_KEY",
+                                   "recorded_in_manifest": False}},
         "selection": {"method": protocol["selected_method"],
                       "structural_rounds": optimization["structural_rounds"],
                       "max_metric_calls": optimization["max_metric_calls"],
@@ -483,8 +487,8 @@ def _load_reviewed_manifest(path: str | Path | None, protocol: dict[str, Any],
     if (reviewed.get("format") != LIVE_MANIFEST_REVIEWED_FORMAT or
         reviewed.get("proposal") != _live_manifest_proposal(protocol, source) or
         reviewed.get("manifest_sha256") != fingerprint(reviewed["proposal"])):
-        raise ConfigurationError("Reviewed live manifest differs from the current protocol or software "
-                                 "parameters; propose and review it again.")
+        raise ConfigurationError("Reviewed live manifest differs from the current protocol, software "
+                                 "parameters, or teacher endpoint; propose and review it again.")
     _validate_live_review(reviewed["proposal"], reviewed.get("review"))
     return reviewed
 

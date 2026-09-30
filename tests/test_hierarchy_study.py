@@ -386,6 +386,7 @@ def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path,
     from s1compiler.io import fingerprint
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
     protocol_path, protocol = _live_test_double_protocol(tmp_path)
     proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
     assert proposal["status"] == "proposed_unexecuted"
@@ -396,6 +397,10 @@ def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path,
     assert proposal["native_backend"]["sdk_retries"] == 0
     assert proposal["native_backend"]["credential"]["recorded_in_manifest"] is False
     assert proposal["teacher"]["model"] == "test-only/model"
+    assert proposal["teacher"]["api_base"] == "provider_default"
+    assert proposal["teacher"]["credential"]["recorded_in_manifest"] is False
+    assert "S1_TEACHER_API_KEY" not in json.dumps({k: v for k, v in proposal["teacher"].items()
+                                                    if k != "credential"})
     assert proposal["teacher"]["provider_request_ceiling"] == (
         protocol["budgets"]["teacher_provider_request_ceiling"])
     assert proposal["selection"]["min_calibration_samples"] == study.LIVE_MIN_CALIBRATION_SAMPLES
@@ -464,6 +469,7 @@ def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(
     from s1compiler.io import fingerprint
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    monkeypatch.setenv("S1_TEACHER_API_BASE", "https://test-only.invalid/v1")
     protocol_path, protocol = _live_test_double_protocol(tmp_path)
     approvals = {"allow_paid": True, "share_feedback": True,
                  "approved_protocol_sha256": fingerprint(protocol)}
@@ -480,10 +486,18 @@ def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(
                           reviewed_manifest=tmp_path / "manifest.json", **approvals)
     with monkeypatch.context() as patch:
         patch.setattr(TypeSafeBackend, "identity", "typesafe-sdk/0.0.0-test-only")
-        with pytest.raises(ConfigurationError, match="differs from the current protocol or software"):
+        with pytest.raises(ConfigurationError, match="differs from the current protocol, software"):
             select_and_freeze(protocol_path, tmp_path / "drifted", teacher=object(),
                               reviewed_manifest=reviewed_path, **approvals)
     assert not (tmp_path / "drifted").exists()
+    assert study._envelope_read(tmp_path / "manifest.json")["teacher"]["api_base"] == (
+        "https://test-only.invalid/v1")
+    with monkeypatch.context() as patch:
+        patch.setenv("S1_TEACHER_API_BASE", "https://other-endpoint.invalid/v1")
+        with pytest.raises(ConfigurationError, match="teacher endpoint"):
+            select_and_freeze(protocol_path, tmp_path / "endpoint-drift", teacher=object(),
+                              reviewed_manifest=reviewed_path, **approvals)
+    assert not (tmp_path / "endpoint-drift").exists()
 
     # With a matching reviewed manifest the next stop is the local credential check, never a call.
     with pytest.raises(ConfigurationError, match="TYPESAFE_API_KEY"):
