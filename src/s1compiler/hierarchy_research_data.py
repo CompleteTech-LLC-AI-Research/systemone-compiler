@@ -233,8 +233,9 @@ def prepare_massive(archive: str | Path, exclusions_path: str | Path, out: str |
                 stream.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
     loaded = {name: read_hierarchy_jsonl(out / f"{name}.jsonl", draft) for name in SPLITS}
     validate_hierarchy_compile_inputs(source, loaded)
+    metric_calls = 5 * (len(loaded["validation"]) + 3)
     estimate = estimate_requests(source, loaded, selected_method="dspy_gepa", structural_rounds=1,
-                                 max_metric_calls=32, teacher_max_calls=8)
+                                 max_metric_calls=metric_calls, teacher_max_calls=8)
     report = {"format": "systemone-hierarchy-dataset-preparation/v1", "status": "pending_human_study_review",
               "dataset": "MASSIVE 1.0 fr-FR", "license": "CC-BY-4.0",
               "source_url": ARCHIVE_URL, "archive_sha256": ARCHIVE_SHA256,
@@ -250,7 +251,7 @@ def prepare_massive(archive: str | Path, exclusions_path: str | Path, out: str |
               "source_contract_sha256": fingerprint(source.source.model_dump(mode="json")),
               "authored_graph_sha256": draft.content_hash, "flat_program_sha256": flat.content_hash,
               "request_estimate": estimate,
-              "proposed_optimization": {"structural_rounds": 1, "max_metric_calls": 32,
+              "proposed_optimization": {"structural_rounds": 1, "max_metric_calls": metric_calls,
                                         "teacher_max_calls": 8, "teacher_max_tokens": 4096},
               "review": {"near_duplicate_independence": "pending", "source_semantics": "pending",
                          "teacher_model_and_sharing": "pending", "external_billing_cap": "pending",

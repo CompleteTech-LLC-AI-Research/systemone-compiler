@@ -119,6 +119,8 @@ def estimate_requests(source: HierarchySource, splits: dict[str, list], *,
         raise ConfigurationError("Authored validation selection must have zero teacher and optimizer calls.")
     if selected_method == "dspy_gepa" and (structural_rounds < 1 or max_metric_calls < 1 or teacher_max_calls < 1):
         raise ConfigurationError("DSPy/GEPA selection requires bounded rounds, metrics, and teacher calls.")
+    if selected_method == "dspy_gepa" and max_metric_calls < len(splits["validation"]) + 2:
+        raise ConfigurationError("GEPA metric budget must exceed initial validation evaluation.")
     leaf_calls = max(len(lower_hierarchy(source).nodes),
                      len(lower_hierarchy(candidate).nodes) if candidate is not None else 0)
     if selected_method == "dspy_gepa":
