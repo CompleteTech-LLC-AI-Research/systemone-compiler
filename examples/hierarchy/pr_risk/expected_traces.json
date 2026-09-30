@@ -1,0 +1,88 @@
+{
+  "format": "systemone-synthetic-example-traces/v1",
+  "graph_sha256": "040ff6e9c49d528ff3e4e802f3a845e0de1321fcd507550c690373de50a42957",
+  "provenance": {
+    "deployment_approved": false,
+    "status": "draft",
+    "synthetic_fixture": true
+  },
+  "source_to_nodes": {
+    "root:breaking": [
+      "breaking"
+    ],
+    "root:combined": [
+      "combined"
+    ],
+    "root:operational": [
+      "operational"
+    ]
+  },
+  "traces": [
+    {
+      "case": null,
+      "id": "pr_risk_train_0",
+      "path": [
+        "breaking",
+        "operational",
+        "combined"
+      ],
+      "review": {
+        "risk": true
+      },
+      "stage_status": {
+        "breaking": "completed",
+        "combined": "completed",
+        "operational": "completed"
+      },
+      "status": "review_required",
+      "synthetic": true,
+      "values": {
+        "risk": 0.23371
+      }
+    },
+    {
+      "case": null,
+      "id": "pr_risk_train_1",
+      "path": [
+        "breaking",
+        "operational",
+        "combined"
+      ],
+      "review": {
+        "risk": true
+      },
+      "stage_status": {
+        "breaking": "completed",
+        "combined": "completed",
+        "operational": "completed"
+      },
+      "status": "review_required",
+      "synthetic": true,
+      "values": {
+        "risk": 1.167677
+      }
+    },
+    {
+      "case": null,
+      "id": "pr_risk_train_2",
+      "path": [
+        "breaking",
+        "operational",
+        "combined"
+      ],
+      "review": {
+        "risk": false
+      },
+      "stage_status": {
+        "breaking": "completed",
+        "combined": "completed",
+        "operational": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "risk": 1.991746
+      }
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{"expected": {"resolution": "refund"}, "group": "support_train_group_0", "id": "support_train_0", "state": {"message": "refund invoice charge duplicated train fixture 0"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_train_group_1", "id": "support_train_1", "state": {"message": "software crash bug urgent train fixture 1"}}
+{"expected": {"resolution": "general"}, "group": "support_train_group_2", "id": "support_train_2", "state": {"message": "software setup help instructions train fixture 2"}}
+{"expected": {"resolution": "sales_followup"}, "group": "support_train_group_3", "id": "support_train_3", "state": {"message": "sales pricing plan inquiry train fixture 3"}}
+{"expected": {"resolution": "general"}, "group": "support_train_group_4", "id": "support_train_4", "state": {"message": "press partnership other train fixture 4"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_train_group_5", "id": "support_train_5", "state": {"message": "refund invoice charge actual crash train fixture 5"}}

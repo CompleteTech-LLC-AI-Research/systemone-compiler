@@ -1,0 +1,22 @@
+[
+  {
+    "first_note": "urgent outage confirmed risk",
+    "second_enabled": true,
+    "second_note": "routine request no risk"
+  },
+  {
+    "first_note": "routine request no risk",
+    "second_enabled": true,
+    "second_note": "urgent outage confirmed risk"
+  },
+  {
+    "first_note": "unclear note",
+    "second_enabled": false,
+    "second_note": "suppressed branch unique"
+  },
+  {
+    "case": "default_second_note",
+    "first_note": "urgent outage confirmed risk",
+    "second_enabled": true
+  }
+]

@@ -1,0 +1,6 @@
+{"expected": {"resolution": "refund"}, "group": "support_calibration_group_0", "id": "support_calibration_0", "state": {"message": "refund invoice charge duplicated calibration fixture 0"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_calibration_group_1", "id": "support_calibration_1", "state": {"message": "software crash bug urgent calibration fixture 1"}}
+{"expected": {"resolution": "general"}, "group": "support_calibration_group_2", "id": "support_calibration_2", "state": {"message": "software setup help instructions calibration fixture 2"}}
+{"expected": {"resolution": "sales_followup"}, "group": "support_calibration_group_3", "id": "support_calibration_3", "state": {"message": "sales pricing plan inquiry calibration fixture 3"}}
+{"expected": {"resolution": "general"}, "group": "support_calibration_group_4", "id": "support_calibration_4", "state": {"message": "press partnership other calibration fixture 4"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_calibration_group_5", "id": "support_calibration_5", "state": {"message": "refund invoice charge actual crash calibration fixture 5"}}

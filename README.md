@@ -158,6 +158,9 @@ versioned source/frozen graph schemas, portable local-definition expansion,
 integrity hashes, and current implementation boundary.
 The [frozen hierarchy runtime guide](docs/HIERARCHY_RUNTIME.md) shows the
 public no-key graph execution API and result statuses.
+The [runnable hierarchy examples](examples/hierarchy/README.md) cover routed
+support, advisory PR risk, and nested reuse with disjoint synthetic datasets
+and checked-in expected traces.
 
 | Command | Purpose |
 |---|---|

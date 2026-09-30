@@ -1,0 +1,30 @@
+{
+  "decisions": {
+    "risk": {
+      "criteria": [
+        "low routine risk",
+        "medium concern",
+        "high urgent risk"
+      ],
+      "goal": "What advisory PR risk is supported by the visible change?",
+      "score_tolerance": 0.5,
+      "type": "score",
+      "weight": 1.0
+    }
+  },
+  "description": "Synthetic software example; no external action authority.",
+  "model": "jev-1.13.0",
+  "name": "advisory_pr_risk",
+  "state": {
+    "diff": {
+      "description": "Synthetic diff summary",
+      "required": true,
+      "type": "string"
+    },
+    "files": {
+      "description": "Changed relative paths; never read by the example",
+      "required": true,
+      "type": "array"
+    }
+  }
+}

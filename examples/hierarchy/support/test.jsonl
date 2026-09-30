@@ -1,0 +1,6 @@
+{"expected": {"resolution": "refund"}, "group": "support_test_group_0", "id": "support_test_0", "state": {"message": "refund invoice charge duplicated test fixture 0"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_test_group_1", "id": "support_test_1", "state": {"message": "software crash bug urgent test fixture 1"}}
+{"expected": {"resolution": "general"}, "group": "support_test_group_2", "id": "support_test_2", "state": {"message": "software setup help instructions test fixture 2"}}
+{"expected": {"resolution": "sales_followup"}, "group": "support_test_group_3", "id": "support_test_3", "state": {"message": "sales pricing plan inquiry test fixture 3"}}
+{"expected": {"resolution": "general"}, "group": "support_test_group_4", "id": "support_test_4", "state": {"message": "press partnership other test fixture 4"}}
+{"expected": {"resolution": "bug_fix"}, "group": "support_test_group_5", "id": "support_test_5", "state": {"message": "refund invoice charge actual crash test fixture 5"}}

@@ -1,0 +1,172 @@
+{
+  "format": "systemone-synthetic-example-traces/v1",
+  "graph_sha256": "a9f8d9ff0126cbe3152945e876147f739f152359abcce7db8d96f5ee09ed3771",
+  "provenance": {
+    "deployment_approved": false,
+    "status": "draft",
+    "synthetic_fixture": true
+  },
+  "source_to_nodes": {
+    "root:billing": [
+      "billing"
+    ],
+    "root:router": [
+      "router"
+    ],
+    "root:sales": [
+      "sales"
+    ],
+    "root:technical_fix": [
+      "technical_fix"
+    ],
+    "root:technical_help": [
+      "technical_help"
+    ],
+    "root:technical_triage": [
+      "technical_triage"
+    ]
+  },
+  "traces": [
+    {
+      "case": null,
+      "id": "support_train_0",
+      "path": [
+        "router",
+        "billing"
+      ],
+      "review": {
+        "resolution": false
+      },
+      "stage_status": {
+        "billing": "completed",
+        "router": "completed",
+        "sales": "skipped",
+        "technical_fix": "skipped",
+        "technical_help": "skipped",
+        "technical_triage": "skipped"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "resolution": "refund"
+      }
+    },
+    {
+      "case": null,
+      "id": "support_train_1",
+      "path": [
+        "router",
+        "technical_triage",
+        "technical_fix"
+      ],
+      "review": {
+        "resolution": false
+      },
+      "stage_status": {
+        "billing": "skipped",
+        "router": "completed",
+        "sales": "skipped",
+        "technical_fix": "completed",
+        "technical_help": "skipped",
+        "technical_triage": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "resolution": "bug_fix"
+      }
+    },
+    {
+      "case": null,
+      "id": "support_train_2",
+      "path": [
+        "router",
+        "technical_triage",
+        "technical_help"
+      ],
+      "review": {
+        "resolution": false
+      },
+      "stage_status": {
+        "billing": "skipped",
+        "router": "completed",
+        "sales": "skipped",
+        "technical_fix": "skipped",
+        "technical_help": "completed",
+        "technical_triage": "completed"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "resolution": "bug_fix"
+      }
+    },
+    {
+      "case": null,
+      "id": "support_train_3",
+      "path": [
+        "router",
+        "sales"
+      ],
+      "review": {
+        "resolution": false
+      },
+      "stage_status": {
+        "billing": "skipped",
+        "router": "completed",
+        "sales": "completed",
+        "technical_fix": "skipped",
+        "technical_help": "skipped",
+        "technical_triage": "skipped"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "resolution": "sales_followup"
+      }
+    },
+    {
+      "case": null,
+      "id": "support_train_4",
+      "path": [
+        "router"
+      ],
+      "review": {},
+      "stage_status": {
+        "billing": "skipped",
+        "router": "completed",
+        "sales": "skipped",
+        "technical_fix": "skipped",
+        "technical_help": "skipped",
+        "technical_triage": "skipped"
+      },
+      "status": "review_required",
+      "synthetic": true,
+      "values": {}
+    },
+    {
+      "case": "incorrect_router",
+      "id": "support_train_5",
+      "path": [
+        "router",
+        "billing"
+      ],
+      "review": {
+        "resolution": false
+      },
+      "stage_status": {
+        "billing": "completed",
+        "router": "completed",
+        "sales": "skipped",
+        "technical_fix": "skipped",
+        "technical_help": "skipped",
+        "technical_triage": "skipped"
+      },
+      "status": "completed",
+      "synthetic": true,
+      "values": {
+        "resolution": "refund"
+      }
+    }
+  ]
+}

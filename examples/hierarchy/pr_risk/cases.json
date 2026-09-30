@@ -1,0 +1,23 @@
+[
+  {
+    "diff": "documentation routine low",
+    "files": [
+      "docs/README.md"
+    ],
+    "risk": 0
+  },
+  {
+    "diff": "localized service medium",
+    "files": [
+      "src/service.py"
+    ],
+    "risk": 1
+  },
+  {
+    "diff": "public interface removed breaking urgent shared authentication deployment",
+    "files": [
+      "src/api.py"
+    ],
+    "risk": 2
+  }
+]
