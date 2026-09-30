@@ -241,7 +241,9 @@ def test_identical_responses_have_identical_route_and_output_scope():
     first = runtime.run({"message": "software crash bug"})
     second = runtime.run({"message": "software crash bug"})
     managed.close()
-    assert first == second
+    assert first["status"] == second["status"]
+    assert first["executed"] == second["executed"]
+    assert first["decisions"] == second["decisions"]
     assert first["executed"] == ["router", "technical"]
     assert first["decisions"]["resolution"]["origin"]["stage"] == "technical"
 

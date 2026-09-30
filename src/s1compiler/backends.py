@@ -4,6 +4,7 @@ import math
 import os
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -22,6 +23,7 @@ class Response:
     latency_ms: float = 0.0
     cached: bool = False
     synthetic: bool = False
+    attempt_receipt: int | None = None  # Local reservation ID; never serialized into cache values.
 
     def to_dict(self):
         return {
@@ -41,15 +43,117 @@ class Backend(Protocol):
 class Budget:
     maximum: int
     used: int = 0
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False, compare=False)
 
     def __post_init__(self):
         if self.maximum < 1:
             raise ConfigurationError("Call budget must be positive.")
 
     def reserve(self):
-        if self.used >= self.maximum:
-            raise BudgetExceeded(f"Call budget exhausted ({self.used}/{self.maximum}).")
-        self.used += 1
+        with self._lock:
+            if self.used >= self.maximum:
+                raise BudgetExceeded(f"Call budget exhausted ({self.used}/{self.maximum}).")
+            self.used += 1
+
+
+class AttemptLedger:
+    """Charged, per-graph native reservations; unsettled calls remain charged."""
+
+    def __init__(self, *, graph_sha256: str, maximum: int, nodes: set[str],
+                 node_limits: dict[str, int] | None = None, policy: dict[str, Any] | None = None):
+        if type(maximum) is not int or maximum < 1 or not nodes:
+            raise ConfigurationError("Graph attempt limit and node set must be positive.")
+        self.graph_sha256, self.maximum = graph_sha256, maximum
+        self.nodes = frozenset(nodes)
+        self.node_limits = dict(node_limits or {})
+        self.policy = copy.deepcopy(policy or {})
+        if not isinstance(self.policy, dict):
+            raise ConfigurationError("Attempt ledger policy must be a JSON object.")
+        canonical(self.policy)
+        if not set(self.node_limits) <= self.nodes or any(
+            type(limit) is not int or not 1 <= limit <= maximum for limit in self.node_limits.values()
+        ):
+            raise ConfigurationError("Node attempt limits must be positive and within the graph limit.")
+        self._lock = threading.Lock()
+        self._receipts: list[dict[str, Any]] = []
+
+    def admit(self, budget: Budget, node_id: str) -> int:
+        """Reserve graph and owner budgets atomically before native dispatch."""
+        with self._lock:
+            if node_id not in self.nodes:
+                raise ConfigurationError("Attempt reservation names an unknown graph node.")
+            if len(self._receipts) >= self.maximum:
+                raise BudgetExceeded(f"Graph attempt limit exhausted ({len(self._receipts)}/{self.maximum}).")
+            used_by_node = sum(receipt["node_id"] == node_id for receipt in self._receipts)
+            if used_by_node >= self.node_limits.get(node_id, self.maximum):
+                raise BudgetExceeded(f"Node attempt limit exhausted: {node_id}.")
+            budget.reserve()  # Failure leaves the graph ledger unchanged.
+            receipt_id = len(self._receipts) + 1
+            self._receipts.append({"id": receipt_id, "node_id": node_id, "status": "in_flight"})
+            return receipt_id
+
+    def mark(self, receipt_id: int, status: str) -> None:
+        if status not in {"response_received", "validated", "invalid_response",
+                          "identity_rejected", "uncertain"}:
+            raise ConfigurationError("Invalid attempt receipt status.")
+        with self._lock:
+            if not 1 <= receipt_id <= len(self._receipts):
+                raise ConfigurationError("Unknown attempt receipt.")
+            receipt = self._receipts[receipt_id - 1]
+            allowed = {"in_flight": {"response_received", "uncertain"},
+                       "response_received": {"validated", "invalid_response", "identity_rejected", "uncertain"}}
+            if status not in allowed.get(receipt["status"], set()):
+                raise ConfigurationError("Attempt receipt is already settled.")
+            receipt["status"] = status
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return {"format": "systemone-attempt-ledger/v1", "graph_sha256": self.graph_sha256,
+                    "maximum": self.maximum, "nodes": sorted(self.nodes),
+                    "node_limits": dict(self.node_limits), "policy": copy.deepcopy(self.policy),
+                    "used": len(self._receipts), "receipts": copy.deepcopy(self._receipts)}
+
+    def status(self, receipt_id: int | None) -> str | None:
+        if receipt_id is None:
+            return None
+        with self._lock:
+            if not 1 <= receipt_id <= len(self._receipts):
+                raise ConfigurationError("Unknown attempt receipt.")
+            return self._receipts[receipt_id - 1]["status"]
+
+    @classmethod
+    def restore(cls, data: dict[str, Any], *, graph_sha256: str, maximum: int,
+                nodes: set[str], node_limits: dict[str, int] | None = None,
+                policy: dict[str, Any] | None = None) -> AttemptLedger:
+        ledger = cls(graph_sha256=graph_sha256, maximum=maximum, nodes=nodes,
+                     node_limits=node_limits, policy=policy)
+        if not isinstance(data, dict) or set(data) != {
+            "format", "graph_sha256", "maximum", "nodes", "node_limits", "policy", "used", "receipts"
+        } or data["format"] != "systemone-attempt-ledger/v1" or data["graph_sha256"] != graph_sha256 or (
+            data["maximum"] != maximum or data["nodes"] != sorted(nodes) or
+            data["node_limits"] != ledger.node_limits or data["policy"] != ledger.policy
+        ):
+            raise ConfigurationError("Attempt ledger identity or limits differ from the frozen run.")
+        receipts = data["receipts"]
+        if not isinstance(receipts, list) or type(data["used"]) is not int or data["used"] != len(receipts) or (
+            len(receipts) > maximum
+        ):
+            raise ConfigurationError("Attempt ledger receipt count is invalid.")
+        for index, receipt in enumerate(receipts, 1):
+            if not isinstance(receipt, dict) or set(receipt) != {"id", "node_id", "status"} or (
+                type(receipt["id"]) is not int or receipt["id"] != index or receipt["node_id"] not in nodes or
+                receipt["status"] not in {"in_flight", "response_received", "validated",
+                                          "invalid_response", "identity_rejected", "uncertain"}
+            ):
+                raise ConfigurationError("Attempt ledger contains an invalid receipt.")
+        for node_id, limit in ledger.node_limits.items():
+            if sum(receipt["node_id"] == node_id for receipt in receipts) > limit:
+                raise ConfigurationError("Attempt ledger exceeds a frozen node limit.")
+        ledger._receipts = copy.deepcopy(receipts)
+        for receipt in ledger._receipts:
+            if receipt["status"] in {"in_flight", "response_received"}:
+                receipt["status"] = "uncertain"
+        return ledger
 
 
 class TypeSafeBackend:
@@ -186,6 +290,7 @@ class ManagedBackend:
     def __init__(self, backend: Backend, *, max_calls: int = 500,
                  cache: AnswerCache | None = None, max_request_chars: int = 120000):
         self.backend = backend
+        self._lock = threading.RLock()
         self.budget = Budget(max_calls)
         self.cache = cache
         self.identity = backend.identity
@@ -197,7 +302,9 @@ class ManagedBackend:
         self.usage_unknown_calls = 0
         self.models_seen: set[str] = set()
 
-    def evaluate(self, program: Program, state: dict[str, Any]) -> Response:
+    def evaluate(self, program: Program, state: dict[str, Any], *,
+                 ledger: AttemptLedger | None = None, node_id: str | None = None,
+                 before_admission=None) -> Response:
         payload = {"model": program.model, "state": state,
                    "questions": {key: q.wire() for key, q in program.questions.items()}}
         if len(canonical(payload)) > self.max_request_chars:
@@ -206,27 +313,49 @@ class ManagedBackend:
         if program.model in {"jev", "jev-latest", "jev-preview"}:
             raise ConfigurationError("Use a versioned model ID, not an alias, for measured execution.")
         key = fingerprint({"provider": self.identity, "wire_format": 1, "payload": payload})
-        response = self.cache.get(key) if self.cache else None
-        if response is not None:
-            self._validate_identity(program, response)
+        with self._lock:  # Graph scheduling stays serial; this also owns SQLite connection access.
+            response = self.cache.get(key) if self.cache else None
+            if response is not None:
+                self._validate_identity(program, response)
+                self.models_seen.add(response.model)
+                self.cache_hits += 1
+                response.cached = True
+                response.latency_ms = 0.0
+                response.usage = {"input_tokens": 0, "output_tokens": 0}
+                return response
+            if before_admission is not None:
+                before_admission()
+            if ledger is not None and node_id is None:
+                raise ConfigurationError("Graph admission requires a node ID.")
+            receipt = ledger.admit(self.budget, node_id) if ledger else None
+            if ledger is None:
+                self.budget.reserve()
+            try:
+                response = self.backend.evaluate(program, state)
+            except Exception:
+                if ledger is not None:
+                    ledger.mark(receipt, "uncertain")
+                self.usage_unknown_calls += 1
+                raise
+            if ledger is not None:
+                ledger.mark(receipt, "response_received")
+            try:
+                self._validate_identity(program, response)
+            except BackendError:
+                if ledger is not None:
+                    ledger.mark(receipt, "identity_rejected")
+                self.usage_unknown_calls += 1
+                raise
             self.models_seen.add(response.model)
-            self.cache_hits += 1
-            response.cached = True
-            response.latency_ms = 0.0
-            response.usage = {"input_tokens": 0, "output_tokens": 0}
+            usage = response.usage
+            if usage.get("input_tokens") is None or usage.get("output_tokens") is None:
+                self.usage_unknown_calls += 1
+            self.input_tokens += usage.get("input_tokens") or 0
+            self.output_tokens += usage.get("output_tokens") or 0
+            response.attempt_receipt = receipt
+            # Runtime validates answers before they are trusted. Cache stores raw data
+            # only after Runtime calls remember_validated below.
             return response
-        self.budget.reserve()
-        response = self.backend.evaluate(program, state)
-        self._validate_identity(program, response)
-        self.models_seen.add(response.model)
-        usage = response.usage
-        if usage.get("input_tokens") is None or usage.get("output_tokens") is None:
-            self.usage_unknown_calls += 1
-        self.input_tokens += usage.get("input_tokens") or 0
-        self.output_tokens += usage.get("output_tokens") or 0
-        # Runtime validates answers before they are trusted. Cache stores raw data
-        # only after Runtime calls remember_validated below.
-        return response
 
     def _validate_identity(self, program: Program, response: Response):
         if response.model != program.model:
@@ -234,12 +363,16 @@ class ManagedBackend:
         if response.synthetic != self.synthetic:
             raise BackendError("Response synthetic/live identity differs from the configured backend.")
 
-    def remember_validated(self, program: Program, state: dict[str, Any], response: Response):
-        if self.cache and not response.cached:
-            payload = {"model": program.model, "state": state,
-                       "questions": {key: q.wire() for key, q in program.questions.items()}}
-            key = fingerprint({"provider": self.identity, "wire_format": 1, "payload": payload})
-            self.cache.put(key, copy.deepcopy(response))
+    def remember_validated(self, program: Program, state: dict[str, Any], response: Response,
+                           *, ledger: AttemptLedger | None = None):
+        with self._lock:
+            if self.cache and not response.cached:
+                payload = {"model": program.model, "state": state,
+                           "questions": {key: q.wire() for key, q in program.questions.items()}}
+                key = fingerprint({"provider": self.identity, "wire_format": 1, "payload": payload})
+                self.cache.put(key, copy.deepcopy(response))
+            if ledger is not None and response.attempt_receipt is not None:
+                ledger.mark(response.attempt_receipt, "validated")
 
     def accounting(self):
         return {"backend": self.identity, "synthetic": self.synthetic,
