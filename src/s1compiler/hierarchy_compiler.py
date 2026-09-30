@@ -11,10 +11,11 @@ from .architect import template_program
 from .backends import ManagedBackend
 from .compiler import versions
 from .data import Example, dataset_hash
-from .errors import ConfigurationError, DataError
+from .errors import CandidateError, ConfigurationError, DataError
 from .hierarchy import (FinalReviewGate, HierarchyArtifact, HierarchyProvenance,
                         HierarchySource, lower_hierarchy)
-from .hierarchy_data import HierarchySplitGuard
+from .hierarchy_architect import semantic_review_manifest
+from .hierarchy_data import HierarchySplitGuard, HierarchyTeacherInputs
 from .hierarchy_metrics import evaluate_hierarchy, paired_flat_hierarchy
 from .hierarchy_validation import validate_hierarchy_artifact, validate_hierarchy_compile_inputs
 from .io import fingerprint
@@ -23,16 +24,21 @@ from .metrics import evaluate
 
 @dataclass(frozen=True)
 class HierarchyCompileOptions:
-    """H09 supports authored graphs without teacher proposals or text optimization."""
+    """Bounded structure search precedes calibration and the one-shot test."""
 
     architect: str = "template"
     optimizer: str = "none"
+    structural_rounds: int = 0
     max_calibration_error: float = 0.05
     min_calibration_samples: int = 10
 
     def __post_init__(self):
-        if self.architect != "template" or self.optimizer != "none":
-            raise ConfigurationError("Authored hierarchy compile currently supports template/none only.")
+        if self.architect not in {"template", "dspy"} or self.optimizer != "none":
+            raise ConfigurationError("Hierarchy compile supports template or DSPy structure, with no text optimizer yet.")
+        if (type(self.structural_rounds) is not int or not 0 <= self.structural_rounds <= 10 or
+                (self.architect == "template" and self.structural_rounds != 0) or
+                (self.architect == "dspy" and self.structural_rounds == 0)):
+            raise ConfigurationError("DSPy structure search needs 1..10 rounds; template needs zero.")
         if (type(self.max_calibration_error) not in (int, float) or
                 not math.isfinite(self.max_calibration_error) or
                 not 0 <= self.max_calibration_error <= 1 or
@@ -45,6 +51,7 @@ class HierarchyCompileSession:
     """One candidate and one held-out phase; do not reuse after testing."""
 
     source: HierarchySource
+    selected_source: HierarchySource
     splits: dict[str, tuple[Example, ...]]
     candidate: HierarchyArtifact
     guard: HierarchySplitGuard
@@ -56,6 +63,8 @@ class HierarchyCompileSession:
     baseline_validation: dict[str, Any]
     validation_pair: dict[str, Any]
     observed_nodes: set[str]
+    proposal_history: list[dict[str, Any]]
+    semantic_review: dict[str, Any]
     phase: str = "selected"
     calibration_report: dict[str, Any] | None = None
     calibration_fit: dict[str, Any] | None = None
@@ -121,16 +130,20 @@ def _fit_final_gates(artifact: HierarchyArtifact, rows: list[Example], results: 
 
 
 class HierarchyCompiler:
-    """Compile an authored graph; H10/H11 can reuse phase boundaries for search."""
+    """Compile an authored graph, optionally selecting bounded DSPy structures."""
 
-    def __init__(self, backend: ManagedBackend, *, options: HierarchyCompileOptions | None = None):
-        self.backend = backend
+    def __init__(self, backend: ManagedBackend, *, teacher=None,
+                 options: HierarchyCompileOptions | None = None):
+        self.backend, self.teacher = backend, teacher
         self.options = options or HierarchyCompileOptions()
 
     def select(self, source: HierarchySource, *, train: list[Example], validation: list[Example],
                calibration: list[Example], test: list[Example]) -> HierarchyCompileSession:
         splits = {"train": train, "validation": validation, "calibration": calibration, "test": test}
         preflight = validate_hierarchy_compile_inputs(source, splits)
+        fixed_source = source.model_copy(deep=True)
+        if self.options.architect == "dspy" and self.teacher is None:
+            raise ConfigurationError("DSPy hierarchy search requires an explicitly configured teacher.")
         candidate = lower_hierarchy(source)
         guard = preflight.split_guard
         if guard.graph_sha256 != candidate.content_hash:
@@ -145,11 +158,54 @@ class HierarchyCompiler:
         baseline_report, flat_results = evaluate(flat, list(stable["validation"]), self.backend)
         pair = _paired(candidate, list(stable["validation"]), graph_results, flat_results)
         observed = {stage for result in [*train_results, *graph_results] for stage in result["executed"]}
+        history = [{"phase": "authored", "graph_sha256": candidate.content_hash,
+                    "validation_objective": validation_report["objective"]}]
+        selected_source = fixed_source.model_copy(deep=True)
+        for round_index in range(self.options.structural_rounds):
+            teacher_inputs = HierarchyTeacherInputs(guard)
+            feedback = {"examples": teacher_inputs.examples(list(stable["train"])),
+                        "traces": teacher_inputs.traces(train_results),
+                        "root_quality": train_report["quality_by_root_id"]}
+            try:
+                proposed = self.teacher.propose_hierarchy(fixed_source.model_copy(deep=True),
+                                                          selected_source.model_copy(deep=True), feedback)
+                if not isinstance(proposed, HierarchySource):
+                    raise CandidateError("Teacher did not return a typed hierarchy source.")
+                proposed = HierarchySource.model_validate(proposed.model_dump(mode="json"))
+                if (proposed.source != fixed_source.source or proposed.limits != fixed_source.limits or
+                        proposed.format != fixed_source.format):
+                    raise CandidateError("Teacher proposal changed the fixed source contract or limits.")
+                proposed_artifact = lower_hierarchy(proposed)
+                proposed_guard = HierarchySplitGuard(
+                    proposed_artifact, {name: list(rows) for name, rows in stable.items()})
+            except (CandidateError, DataError, ValueError) as exc:
+                history.append({"phase": "dspy_structure", "round": round_index,
+                                "rejected": "invalid_typed_graph", "error_type": type(exc).__name__})
+                continue
+            measured, proposed_results = evaluate_hierarchy(
+                proposed_artifact, list(stable["validation"]), self.backend,
+                guard=proposed_guard, split="validation")
+            score = measured["objective"]
+            history.append({"phase": "dspy_structure", "round": round_index,
+                            "graph_sha256": proposed_artifact.content_hash,
+                            "validation_objective": score})
+            if score > validation_report["objective"]:
+                proposed_train, proposed_train_results = evaluate_hierarchy(
+                    proposed_artifact, list(stable["train"]), self.backend,
+                    guard=proposed_guard, split="train")
+                selected_source, candidate, guard = proposed, proposed_artifact, proposed_guard
+                train_report, train_results = proposed_train, proposed_train_results
+                validation_report, graph_results = measured, proposed_results
+                pair = _paired(candidate, list(stable["validation"]), graph_results, flat_results)
+                observed = {stage for result in [*train_results, *graph_results]
+                            for stage in result["executed"]}
         return HierarchyCompileSession(
-            source=source.model_copy(deep=True), splits=stable, candidate=candidate, guard=guard,
+            source=fixed_source, selected_source=selected_source, splits=stable,
+            candidate=candidate, guard=guard,
             flat_baseline=flat, owner_start_calls=start, owner_request_limit=self.backend.budget.maximum,
             train_report=train_report, validation_report=validation_report,
-            baseline_validation=baseline_report, validation_pair=pair, observed_nodes=observed)
+            baseline_validation=baseline_report, validation_pair=pair, observed_nodes=observed,
+            proposal_history=history, semantic_review=semantic_review_manifest(fixed_source, selected_source))
 
     def calibrate(self, session: HierarchyCompileSession) -> HierarchyCompileSession:
         if session.phase != "selected":
@@ -168,7 +224,7 @@ class HierarchyCompiler:
         if session.phase != "calibrated":
             raise ConfigurationError("Freeze follows calibration exactly once.")
         if (session.candidate.content_hash != session.guard.graph_sha256 or
-                lower_hierarchy(session.source).content_hash != session.candidate.content_hash or any(
+                lower_hierarchy(session.selected_source).content_hash != session.candidate.content_hash or any(
             dataset_hash(list(session.splits[name])) != dataset_hash(list(session.guard.splits[name]))
             for name in session.splits
         )):
@@ -176,7 +232,9 @@ class HierarchyCompiler:
         frozen = session.candidate.model_copy(deep=True)
         frozen.final_review_gates = copy.deepcopy(session.gates)
         unvisited = sorted({node.id for node in frozen.nodes} - session.observed_nodes)
-        fully_measured = not self.backend.synthetic and not unvisited
+        semantic_review_pending = any(session.semantic_review[key] for key in (
+            "changed_routing_goals_or_conditions", "changed_child_prompts", "changed_composition"))
+        fully_measured = not self.backend.synthetic and not unvisited and not semantic_review_pending
         if fully_measured:
             for node in frozen.nodes:
                 node.program.provenance = {**node.program.provenance, "status": "measured",
@@ -192,6 +250,7 @@ class HierarchyCompiler:
                       "backend": self.backend.identity, "versions": versions(),
                       "execution_kind": "synthetic" if self.backend.synthetic else "real_provider",
                       "unvisited_nodes_before_test": unvisited,
+                      "semantic_review_pending": semantic_review_pending,
                       "compiled_at": datetime.now(timezone.utc).isoformat(),
                       "owner_request_limit": session.owner_request_limit,
                       "route_policy": "frozen_before_calibration_final_gates",
@@ -206,6 +265,10 @@ class HierarchyCompiler:
         frozen.provenance.evidence["calibration_after_gates_sha256"] = fingerprint(final_calibration)
         frozen.provenance.evidence["owner_calls_before_test"] = (
             self.backend.budget.used - session.owner_start_calls)
+        session.semantic_review["frozen_graph_sha256"] = frozen.content_hash
+        frozen.provenance.evidence["semantic_review"] = copy.deepcopy(session.semantic_review)
+        frozen.provenance.evidence["proposal_history"] = copy.deepcopy(session.proposal_history)
+        frozen.provenance.evidence["teacher"] = (self.teacher.accounting() if self.teacher else None)
         frozen = HierarchyArtifact.model_validate(frozen.model_dump(mode="json"))
         session.frozen = frozen
         session.frozen_guard = frozen_guard
@@ -231,17 +294,21 @@ class HierarchyCompiler:
         return {"format": "systemone-hierarchy-compile-report/v1", "graph_sha256": session.frozen.content_hash,
                 "provenance_sha256": session.frozen.provenance_hash,
                 "status": session.frozen.provenance.status, "deployment_approved": False,
-                "selection": {"candidate": "authored", "train": session.train_report,
+                "selection": {"candidate": ("dspy_structure" if session.selected_source != session.source
+                                             else "authored"),
+                              "history": session.proposal_history, "train": session.train_report,
                               "validation": session.validation_report,
                               "baseline_validation": session.baseline_validation,
                               "paired_validation": session.validation_pair},
+                "semantic_review": session.semantic_review,
                 "calibration": {"before_gates": session.calibration_report,
                                 "fit": session.calibration_fit,
                                 "after_gates": session.frozen_calibration_report},
                 "test": {"hierarchy": compiled, "flat": baseline, "paired": pair},
                 "accounting": {"owner_request_limit": session.owner_request_limit,
                                "native_calls_this_compile": self.backend.budget.used - session.owner_start_calls,
-                               "owner": self.backend.accounting()},
+                               "owner": self.backend.accounting(),
+                               "teacher": self.teacher.accounting() if self.teacher else None},
                 "limitations": ["Synthetic execution is not Jev quality evidence.",
                                 "Post-route gates do not tune routing; low-sample branches review.",
                                 "Held-out scores are descriptive, not deployment approval."]}

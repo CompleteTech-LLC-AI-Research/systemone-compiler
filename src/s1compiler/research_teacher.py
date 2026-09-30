@@ -4,7 +4,6 @@ from __future__ import annotations
 import math
 
 from .architect import DSPyTeacher
-from .backends import Budget
 from .errors import BackendError
 
 
@@ -16,9 +15,8 @@ class AuditedDSPyTeacher(DSPyTeacher):
     Forward counts are LM invocations; SDK retries remain disabled by the parent.
     """
     def __init__(self, model, *, expected_response_model, max_provider_calls, **kwargs):
-        super().__init__(model, **kwargs)
+        super().__init__(model, max_provider_calls=max_provider_calls, **kwargs)
         self.expected_response_model = expected_response_model
-        self.provider_budget = Budget(max_provider_calls)
         self.observed_models = set()
         self.input_tokens, self.output_tokens = 0, 0
         self.usage_unknown_calls, self.successful_calls = 0, 0
@@ -26,7 +24,6 @@ class AuditedDSPyTeacher(DSPyTeacher):
         forward = self.lm.forward
 
         def metered_forward(*args, **call_kwargs):
-            self.provider_budget.reserve()
             response = forward(*args, **call_kwargs)
             self.observe(response)
             return response

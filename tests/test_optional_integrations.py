@@ -35,11 +35,16 @@ def test_real_gepa_engine_with_fake_proposer_and_mock_model(program, splits, bac
 
 @pytest.mark.optional
 def test_real_dspy_signature_construction_without_inference():
-    pytest.importorskip("dspy")
+    dspy = pytest.importorskip("dspy")
+    from s1compiler.hierarchy_architect import make_hierarchy_design_signature
+    hierarchy_predictor = dspy.Predict(make_hierarchy_design_signature(dspy))
+    assert {"fixed_source_json", "fixed_limits_json", "train_feedback_json", "plan_json"}.issubset(
+        hierarchy_predictor.signature.fields)
     teacher = DSPyTeacher("openai/test-placeholder-not-a-real-model", allow_paid=True, share_feedback=True)
     assert "plan_json" in teacher.design.signature.fields
     assert "revised_components_json" in teacher.revise.signature.fields
-    assert teacher.budget.used == 0
+    assert "plan_json" in teacher.design_hierarchy.signature.fields
+    assert teacher.budget.used == teacher.provider_budget.used == 0
 
 
 @pytest.mark.optional

@@ -34,10 +34,11 @@ server behavior.
 
 ## DSPy contract
 
-DSPy creates two structured teacher programs (`Design` and `Revise`) using
+DSPy creates three structured teacher programs (`Design`, `HierarchyDesign`, and `Revise`) using
 `dspy.Signature`, `InputField`, `OutputField`, and `Predict`. Inference occurs in
-`dspy.context(lm=...)`. Cache use and automatic retry arguments are explicitly
-configured. Model-specific restrictions on temperature, tokens, supported output
+`dspy.context(lm=..., disable_history=True)`. Cache use and automatic retry arguments are explicitly
+configured. Signature calls and LM-forward attempts have separate ceilings.
+Model-specific restrictions on temperature, tokens, supported output
 formats, or provider model IDs may still need local adjustment.
 
 The local optional test constructs the signatures without inference. It does not

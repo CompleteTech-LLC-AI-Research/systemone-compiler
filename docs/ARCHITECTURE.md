@@ -53,8 +53,10 @@ and pinned model are not negotiable search parameters.
 ## DSPy and GEPA integration
 
 DSPy controls the *teacher*, not the Jev runtime. `Design` converts a UseCase plus
-training examples/errors into an initial or revised typed plan. `Revise` updates
-requested instruction/rubric entries. Both use `dspy.Predict` inside an explicit
+training examples/errors into a flat typed plan. `HierarchyDesign` proposes
+bounded graph JSON from train-only hierarchy traces; authored source contracts
+and limits are copied by the compiler, then the full graph is validated.
+`Revise` updates requested instruction/rubric entries. All use `dspy.Predict` inside an explicit
 `dspy.context(lm=...)`. A user-selected teacher provider is mandatory.
 
 Standalone GEPA receives a candidate mapping `str -> str`. Each value is the JSON
@@ -82,12 +84,15 @@ propose positive numeric composition weights. Direct Choice/Noul outputs must
 retain their primitives. Score outputs may use weighted means of Score/Noul
 question values. Every question must be referenced by a binding.
 
-At most ten structural rounds are allowed; each is evaluated before acceptance.
-This release performs **structure first, then wording**, not joint global search.
-Weights are proposal parameters, not a fitted regression model. There is no
-multi-stage DAG in which one Jev answer becomes another question's state, no
-conditional second model call, and no automatic external escalation service.
-Questions in one request are independent.
+At most ten structural rounds are allowed; each complete candidate is evaluated
+on validation before acceptance. Hierarchy proposals may use typed stage-to-stage
+dataflow, conditional calls, fan-in and bounded reusable subgraphs. The root
+contract, target model and limits stay fixed. Only train examples and sealed
+train traces enter the teacher. Invalid graphs are rejected atomically; provider
+and budget failures remain failures. Structure selection precedes wording
+optimization and final calibration; there is no claim of joint global search.
+Flat questions within one native request remain independent. Neither path
+performs autonomous external actions.
 
 ## State minimization and portability
 
