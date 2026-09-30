@@ -161,6 +161,8 @@ public no-key graph execution API and result statuses.
 The [runnable hierarchy examples](examples/hierarchy/README.md) cover routed
 support, advisory PR risk, and nested reuse with disjoint synthetic datasets
 and checked-in expected traces.
+The [preregistered hierarchy study](docs/HIERARCHY_STUDY.md) provides a separate
+flat-versus-hierarchy runner with frozen selection and strict offline replay.
 
 | Command | Purpose |
 |---|---|
