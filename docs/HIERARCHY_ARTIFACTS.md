@@ -35,8 +35,10 @@ New artifacts start `draft`, with `composition_measured=false` and
 composition and contain only measured leaves; a measured child alone does not
 establish measured graph quality. Deployment approval remains an independent
 explicit decision. The composition report checksum is a required audit pointer,
-not a cryptographic proof that the evaluation was honest. No hierarchy runtime is provided by this schema layer;
-issues #9–#21 add semantic validation, execution, compilation, and examples.
+not a cryptographic proof that the evaluation was honest. The
+[static validator](HIERARCHY_VALIDATION.md) checks authored and frozen graph
+dataflow. Native hierarchy runtime, compilation, and evaluation remain in
+issues #10–#21.
 
 Export the source and artifact JSON schemas with `s1 schema --out schemas`.
 Schema generation, package import and frozen loading need only the base

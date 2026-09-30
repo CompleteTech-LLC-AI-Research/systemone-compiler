@@ -36,6 +36,7 @@ def _origin(value: str) -> str:
 
 class RootRef(StrictModel):
     root: str
+    default: JsonValue | None = None
 
     _check_root = field_validator("root")(_identifier)
 
@@ -43,7 +44,8 @@ class RootRef(StrictModel):
 class StageRef(StrictModel):
     stage: str
     decision: str
-    field: Literal["value", "probability_true", "expected_score"] = "value"
+    field: Literal["value", "probabilities", "p_true", "vendor_confidence", "gate_score", "review_required"]
+    default: JsonValue | None = None
 
     _check_stage = field_validator("stage")(_qualified)
     _check_decision = field_validator("decision")(_identifier)
@@ -258,10 +260,14 @@ class HierarchyArtifact(StrictModel):
         output_ports = {node.id: node.program.decisions for node in self.nodes}
         output_ports.update({export.id: export.output_contracts for export in self.exports})
         for node in self.nodes:
-            if set(node.inputs) != set(node.program.state):
+            if not set(node.inputs) <= set(node.program.state) or any(
+                field.required and port not in node.inputs for port, field in node.program.state.items()
+            ):
                 raise ValueError(f"Leaf input ports differ from frozen program: {node.id}")
         for export in self.exports:
-            if set(export.inputs) != set(export.input_contracts):
+            if not set(export.inputs) <= set(export.input_contracts) or any(
+                field.required and port not in export.inputs for port, field in export.input_contracts.items()
+            ):
                 raise ValueError(f"Subgraph export inputs differ from their contract: {export.id}")
             if set(export.outputs) != set(export.output_contracts):
                 raise ValueError(f"Subgraph export outputs differ from their contract: {export.id}")
@@ -303,6 +309,15 @@ class HierarchyArtifact(StrictModel):
         semantic = self.model_dump(mode="json", exclude={"provenance"})
         for node in semantic["nodes"]:
             node["program"].pop("provenance", None)
+        # H03 added optional typed defaults to references. An absent default
+        # must keep the H02 v1 semantic hash, including for already saved files.
+        for stage in [*semantic["nodes"], *semantic["exports"]]:
+            refs = list(stage["inputs"].values())
+            if stage["when"]:
+                refs.extend(predicate["ref"] for predicate in stage["when"]["all"])
+            for ref in refs:
+                if ref.get("default") is None:
+                    ref.pop("default", None)
         semantic["nodes"].sort(key=lambda node: node["id"])
         semantic["exports"].sort(key=lambda export: export["id"])
         for instances in semantic["source_to_nodes"].values():
@@ -315,8 +330,11 @@ class HierarchyArtifact(StrictModel):
                             "leaves": {node.id: node.program.provenance for node in self.nodes}})
 
     def save(self, path: str | Path) -> None:
+        from .hierarchy_validation import validate_hierarchy_artifact
+
         document = self.model_dump(mode="json")
         self.model_validate(document)  # Recheck nested mutable values before sealing the envelope.
+        validate_hierarchy_artifact(self)
         atomic_json(path, {"artifact": document, "sha256": fingerprint(document)})
 
     @classmethod
@@ -326,7 +344,11 @@ class HierarchyArtifact(StrictModel):
             raise DataError("Expected a hierarchy artifact envelope.")
         if not isinstance(data["artifact"], dict) or fingerprint(data["artifact"]) != data["sha256"]:
             raise DataError("Hierarchy artifact checksum mismatch; recompile or verify the file.")
-        return cls.model_validate(data["artifact"])
+        artifact = cls.model_validate(data["artifact"])
+        from .hierarchy_validation import validate_hierarchy_artifact
+
+        validate_hierarchy_artifact(artifact)
+        return artifact
 
 
 def load_artifact(path: str | Path) -> Program | HierarchyArtifact:
@@ -345,6 +367,9 @@ def load_artifact(path: str | Path) -> Program | HierarchyArtifact:
 
 def lower_hierarchy(source: HierarchySource) -> HierarchyArtifact:
     """Embed local definitions as bounded, qualified leaf instances."""
+    from .hierarchy_validation import validate_hierarchy_source
+
+    plan = validate_hierarchy_source(source)
     nodes: list[LoweredNode] = []
     exports: list[LoweredExport] = []
     mapping: dict[str, list[str]] = {}
@@ -361,7 +386,8 @@ def lower_hierarchy(source: HierarchySource) -> HierarchyArtifact:
                 if prefix:
                     raise DataError(f"Unbound subgraph input: {ref.root}")
                 return ref
-            return StageRef(stage=f"{prefix}{ref.stage}", decision=ref.decision, field=ref.field)
+            return StageRef(stage=f"{prefix}{ref.stage}", decision=ref.decision,
+                            field=ref.field, default=ref.default)
 
         def rebase_when(condition: Condition | None) -> Condition | None:
             if condition is None:
@@ -369,7 +395,9 @@ def lower_hierarchy(source: HierarchySource) -> HierarchyArtifact:
             return Condition(all=[Predicate(ref=rebase_ref(p.ref), op=p.op, value=p.value)
                                   for p in condition.all])
 
-        for stage in graph.stages:
+        stages = {stage.id: stage for stage in graph.stages}
+        for stage_id in plan.order[stack[-1] if stack else "root"]:
+            stage = stages[stage_id]
             qualified = f"{prefix}{stage.id}"
             if len(nodes) + len(exports) >= limits.max_expanded_nodes:
                 raise DataError("Expanded node limit exceeded.")
@@ -407,9 +435,9 @@ def lower_hierarchy(source: HierarchySource) -> HierarchyArtifact:
             raise DataError("Expanded native call limit exceeded.")
 
     expand(source.graph, "", (), {})
-    return HierarchyArtifact(
+    artifact = HierarchyArtifact(
         format="systemone-hierarchy/v1", source=source.source, limits=limits,
-        nodes=sorted(nodes, key=lambda node: node.id), exports=sorted(exports, key=lambda export: export.id),
+        nodes=nodes, exports=sorted(exports, key=lambda export: export.id),
         final={name: FinalMapping(
             candidates=[Candidate(stage=c.stage, decision=c.decision,
                                   label_map=c.label_map, distribution_scope=c.distribution_scope)
@@ -417,3 +445,7 @@ def lower_hierarchy(source: HierarchySource) -> HierarchyArtifact:
             for name, mapping_ in source.graph.final.items()},
         source_to_nodes={name: sorted(instances) for name, instances in mapping.items()},
     )
+    from .hierarchy_validation import validate_hierarchy_artifact
+
+    validate_hierarchy_artifact(artifact)
+    return artifact
