@@ -1,0 +1,91 @@
+{
+  "chain.json": {
+    "synthetic": true,
+    "state": {
+      "message": "urgent outage"
+    },
+    "expected": {
+      "status": "completed",
+      "executed": [
+        "signal",
+        "priority"
+      ]
+    }
+  },
+  "conditional.json": {
+    "synthetic": true,
+    "state": {
+      "message": "refund invoice charge"
+    },
+    "expected": {
+      "status": "completed",
+      "executed": [
+        "router",
+        "billing"
+      ],
+      "skipped": [
+        "technical"
+      ],
+      "distribution_scope": "branch_conditional"
+    }
+  },
+  "diamond.json": {
+    "synthetic": true,
+    "state": {
+      "diff": "urgent outage"
+    },
+    "expected": {
+      "status": "completed",
+      "executed": [
+        "breaking",
+        "operational",
+        "combined"
+      ]
+    }
+  },
+  "nested.json": {
+    "synthetic": true,
+    "state": {
+      "first_note": "urgent outage",
+      "second_note": "routine request"
+    },
+    "expected": {
+      "status": "completed",
+      "executed": [
+        "first/check",
+        "second/check"
+      ],
+      "qualified_instances": [
+        "first/check",
+        "second/check"
+      ]
+    }
+  },
+  "invalid_cycle.json": {
+    "synthetic": true,
+    "state": {
+      "message": "urgent outage"
+    },
+    "expected": {
+      "error": "cycle"
+    }
+  },
+  "invalid_unbound.json": {
+    "synthetic": true,
+    "state": {
+      "message": "urgent outage"
+    },
+    "expected": {
+      "error": "undeclared_root_field"
+    }
+  },
+  "invalid_incomplete.json": {
+    "synthetic": true,
+    "state": {
+      "message": "refund invoice charge"
+    },
+    "expected": {
+      "error": "missing_final_output"
+    }
+  }
+}
