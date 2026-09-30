@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from .errors import BackendError, BudgetExceeded, ConfigurationError
 from .io import canonical, fingerprint, json_loads
@@ -76,6 +76,13 @@ class AttemptLedger:
             raise ConfigurationError("Node attempt limits must be positive and within the graph limit.")
         self._lock = threading.Lock()
         self._receipts: list[dict[str, Any]] = []
+        self.on_change: Callable[[dict[str, Any]], None] | None = None
+
+    def _snapshot_unlocked(self) -> dict[str, Any]:
+        return {"format": "systemone-attempt-ledger/v1", "graph_sha256": self.graph_sha256,
+                "maximum": self.maximum, "nodes": sorted(self.nodes),
+                "node_limits": dict(self.node_limits), "policy": copy.deepcopy(self.policy),
+                "used": len(self._receipts), "receipts": copy.deepcopy(self._receipts)}
 
     def admit(self, budget: Budget, node_id: str) -> int:
         """Reserve graph and owner budgets atomically before native dispatch."""
@@ -90,6 +97,8 @@ class AttemptLedger:
             budget.reserve()  # Failure leaves the graph ledger unchanged.
             receipt_id = len(self._receipts) + 1
             self._receipts.append({"id": receipt_id, "node_id": node_id, "status": "in_flight"})
+            if self.on_change is not None:
+                self.on_change(self._snapshot_unlocked())
             return receipt_id
 
     def mark(self, receipt_id: int, status: str) -> None:
@@ -105,13 +114,12 @@ class AttemptLedger:
             if status not in allowed.get(receipt["status"], set()):
                 raise ConfigurationError("Attempt receipt is already settled.")
             receipt["status"] = status
+            if self.on_change is not None:
+                self.on_change(self._snapshot_unlocked())
 
     def snapshot(self) -> dict[str, Any]:
         with self._lock:
-            return {"format": "systemone-attempt-ledger/v1", "graph_sha256": self.graph_sha256,
-                    "maximum": self.maximum, "nodes": sorted(self.nodes),
-                    "node_limits": dict(self.node_limits), "policy": copy.deepcopy(self.policy),
-                    "used": len(self._receipts), "receipts": copy.deepcopy(self._receipts)}
+            return self._snapshot_unlocked()
 
     def status(self, receipt_id: int | None) -> str | None:
         if receipt_id is None:

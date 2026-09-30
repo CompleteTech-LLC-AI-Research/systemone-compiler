@@ -13,6 +13,8 @@ from .errors import BackendError, BudgetExceeded, ConfigurationError, DataError
 from .hierarchy import (Candidate, Condition, HierarchyArtifact, LoweredExport,
                         LoweredNode, Reference, RootRef)
 from .hierarchy_validation import validate_hierarchy_artifact
+from .hierarchy_evidence import HierarchyEvidence
+from .io import fingerprint
 from .models import project_state
 from .runtime import Runtime
 
@@ -51,20 +53,31 @@ class _NodeBackend:
     """Bind one leaf to the caller's shared backend and attempt ledger."""
 
     def __init__(self, backend: ManagedBackend, ledger: AttemptLedger, node_id: str,
-                 before_admission: Callable[[], None]):
+                 before_admission: Callable[[], None], evidence: HierarchyEvidence | None = None):
         self.backend, self.ledger, self.node_id = backend, ledger, node_id
         self.before_admission = before_admission
         self.synthetic = backend.synthetic
         self.last_receipt: int | None = None
+        self.last_response = None
+        self.evidence = evidence
+        self.replayed = False
 
     def evaluate(self, program, state):
+        if self.evidence is not None:
+            prior = self.evidence.stage_response(self.node_id, program, state)
+            if prior is not None:
+                self.replayed = True
+                self.last_response = prior
+                return prior
         response = self.backend.evaluate(program, state, ledger=self.ledger,
                                          node_id=self.node_id, before_admission=self.before_admission)
         self.last_receipt = response.attempt_receipt
+        self.last_response = response
         return response
 
     def remember_validated(self, program, state, response):
-        self.backend.remember_validated(program, state, response, ledger=self.ledger)
+        if not self.replayed:
+            self.backend.remember_validated(program, state, response, ledger=self.ledger)
 
 
 class HierarchyRuntime:
@@ -101,7 +114,53 @@ class HierarchyRuntime:
         return cls(HierarchyArtifact.load(path), backend, **kwargs)
 
     def run(self, state: dict[str, Any], *, cancel_requested: Callable[[], bool] | None = None,
-            timeout_seconds: float | None = None, ledger: AttemptLedger | None = None) -> dict[str, Any]:
+            timeout_seconds: float | None = None, ledger: AttemptLedger | None = None,
+            evidence_dir: str | Path | None = None, evidence_mode: str = "create",
+            _evidence: HierarchyEvidence | None = None) -> dict[str, Any]:
+        if evidence_dir is None and _evidence is None and evidence_mode != "create":
+            raise ConfigurationError("Evidence replay or resume requires an evidence directory.")
+        if evidence_dir is not None:
+            if ledger is not None or _evidence is not None:
+                raise ConfigurationError("Durable evidence owns the graph attempt ledger.")
+            projected = project_state(self.artifact.source.state, state)
+            with HierarchyEvidence(evidence_dir, artifact=self.artifact, backend=self.backend,
+                                   input_sha256=fingerprint(projected),
+                                   max_graph_attempts=self.max_graph_attempts,
+                                   node_limits=self.node_attempt_limits,
+                                   policy=asdict(self.retry_policy), mode=evidence_mode) as evidence:
+                if evidence_mode == "replay" and evidence.final is None:
+                    raise DataError("Offline replay requires a complete final result.")
+                prior_used = self.backend.budget.used
+                if evidence_mode == "replay":
+                    self.backend.budget.used = (evidence.manifest["owner_start_used"] +
+                                                evidence.ledger.snapshot()["used"])
+                try:
+                    result = self.run(state, cancel_requested=cancel_requested,
+                                      timeout_seconds=timeout_seconds, ledger=evidence.ledger,
+                                      _evidence=evidence)
+                finally:
+                    if evidence_mode == "replay":
+                        self.backend.budget.used = prior_used
+                if evidence.final is not None:
+                    stored = evidence.final["result"]
+                    fields = ("format", "graph_sha256", "model", "synthetic", "status",
+                              "decisions", "stages", "executed", "path")
+                    if any(result.get(field) != stored.get(field) for field in fields) or (
+                        set(evidence.stages) != set(result["executed"])
+                    ):
+                        raise DataError("Offline hierarchy replay differs from durable graph evidence.")
+                    return copy.deepcopy(stored)
+                if evidence_mode == "replay":
+                    raise DataError("Offline replay lacks final graph evidence.")
+                evidence.reconcile_accounting(result)
+                result["evidence"] = {"mode": "retained_raw_response", "resume_available": True,
+                                      "run_id": evidence.manifest["run_id"],
+                                      "format": "systemone-hierarchy-evidence/v1"}
+                if result["status"] in {"completed", "review_required"}:
+                    evidence.append_result(result)
+                else:
+                    evidence.append_failure(result)
+                return result
         started = time.monotonic()
         if timeout_seconds is not None and (not isinstance(timeout_seconds, (int, float)) or
                                             not math.isfinite(timeout_seconds) or
@@ -135,7 +194,7 @@ class HierarchyRuntime:
         try:
             decisions, review = self._run_scope("", self.artifact.final, root_state,
                                                 values, stages, executed, path, cancel_requested,
-                                                deadline, ledger)
+                                                deadline, ledger, _evidence)
             status = "review_required" if review or set(decisions) != set(self.artifact.source.decisions) else "completed"
             if self._cancelled(cancel_requested, deadline):
                 status = "cancelled"
@@ -160,6 +219,7 @@ class HierarchyRuntime:
             "stages": stages,
             "executed": executed,
             "path": path,
+            "evidence": {"mode": "none", "resume_available": False},
             "accounting": {"requests_attempted": self.backend.budget.used - before_calls,
                            "graph_executions": 1,
                            "leaf_evaluations": len(set(attempted_nodes)) + self.backend.cache_hits - before_hits,
@@ -195,14 +255,18 @@ class HierarchyRuntime:
         return False
 
     def _run_leaf(self, node: LoweredNode, state: dict[str, Any], ledger: AttemptLedger,
-                  cancel_requested: Callable[[], bool] | None, deadline: float | None) -> dict[str, Any]:
+                  cancel_requested: Callable[[], bool] | None, deadline: float | None,
+                  evidence: HierarchyEvidence | None) -> dict[str, Any]:
         transient_retries = invalid_retries = 0
         while True:
             self._check_cancel(cancel_requested, deadline)
             view = _NodeBackend(self.backend, ledger, node.id,
-                                lambda: self._check_cancel(cancel_requested, deadline))
+                                lambda: self._check_cancel(cancel_requested, deadline), evidence)
             try:
-                return Runtime(node.program, view, enforce_release=self.enforce_release).run(state)
+                result = Runtime(node.program, view, enforce_release=self.enforce_release).run(state)
+                if evidence is not None:
+                    evidence.append_stage(node, state, result, view.last_response)
+                return result
             except (BackendError, TimeoutError, ConnectionError) as error:
                 invalid = isinstance(error, BackendError) and ledger.status(view.last_receipt) == "response_received"
                 transient = self._transient(error)
@@ -321,7 +385,7 @@ class HierarchyRuntime:
     def _run_scope(self, prefix: str, final: dict[str, Any], root: dict[str, Any],
                    values: dict[str, dict[str, dict[str, Any]]], stages: dict[str, dict[str, Any]],
                    executed: list[str], path: list[str], cancel_requested: Callable[[], bool] | None,
-                   deadline: float | None, ledger: AttemptLedger,
+                   deadline: float | None, ledger: AttemptLedger, evidence: HierarchyEvidence | None,
                    ) -> tuple[dict[str, dict[str, Any]], bool]:
         local = self._local_stages(prefix)
         for name in self._local_order(local):
@@ -380,13 +444,13 @@ class HierarchyRuntime:
                 projected = project_state(ports, mapped)
                 stages[name] = {"status": "running"}
                 if isinstance(stage, LoweredNode):
-                    response = self._run_leaf(stage, projected, ledger, cancel_requested, deadline)
+                    response = self._run_leaf(stage, projected, ledger, cancel_requested, deadline, evidence)
                     values[name] = response["decisions"]
                     executed.append(name)
                     review = any(item["review_required"] for item in response["decisions"].values())
                 else:
                     outputs, review = self._run_scope(name + "/", stage.outputs, root, values, stages,
-                                                      executed, path, cancel_requested, deadline, ledger)
+                                                      executed, path, cancel_requested, deadline, ledger, evidence)
                     if set(outputs) != set(stage.output_contracts):
                         stages[name] = {"status": "review_blocked", "reason": "subgraph_incomplete"}
                         continue
