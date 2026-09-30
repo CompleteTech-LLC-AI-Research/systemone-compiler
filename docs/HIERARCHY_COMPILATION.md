@@ -19,8 +19,22 @@ artifact.save("frozen-graph.json")
 The equivalent explicit sequence is `select`, `calibrate`, `freeze`, then
 `test`. Selection runs registered train examples, evaluates the authored graph
 and a fixed-contract flat template on validation, and never reads test results.
-H09 does not perform structure or wording search; H10/H11 can use these phase
-boundaries without invoking a complete compile per candidate.
+With `HierarchyCompileOptions(architect="dspy", structural_rounds=1..10)`, an
+explicitly configured `DSPyTeacher` may propose bounded structure from train
+examples and sealed train traces. Each complete graph is validated and scored on
+validation before acceptance. Rejected JSON or graph data leaves the prior
+candidate intact; provider and budget failures propagate. Text optimization is
+separate and follows structure selection. Teacher uploads require separate
+sharing consent, and this offline source release makes none by default.
+
+The proposal output contains only `definitions` and `graph`. The compiler copies
+the root source contract, model and graph limits; generated text is never run as
+code. The frozen artifact records a semantic review manifest with changed
+routing goals, child prompts, composition, and its exact graph hash. A valid
+schema does not certify semantic equivalence or deployment approval.
+If a selected structure changes routing, prompts or composition, the artifact
+remains draft for real-provider execution until semantic review is resolved;
+the compiler does not self-approve it.
 
 Calibration fits **post-route final review gates** per public output and
 selected origin. It uses only root labels; it never guesses an intermediate
