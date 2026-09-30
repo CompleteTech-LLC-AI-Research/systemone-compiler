@@ -1,0 +1,3 @@
+{"id":"validation_0","group":"validation_group_0","state":{"message":"validation refund synthetic ticket 0"},"expected":{"resolution":"refund"}}
+{"id":"validation_1","group":"validation_group_1","state":{"message":"validation bug_fix synthetic ticket 1"},"expected":{"resolution":"bug_fix"}}
+{"id":"validation_2","group":"validation_group_2","state":{"message":"validation general synthetic ticket 2"},"expected":{"resolution":"general"}}

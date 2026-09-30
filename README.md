@@ -173,6 +173,27 @@ public no-key graph execution API and result statuses.
 | `s1 doctor --check-optional` | Check installed dependency interfaces without inference. |
 | `s1 demo --out runs/demo` | Exercise the whole pipeline with a no-key synthetic fixture. |
 
+For an authored graph, run `s1 init my-graph --starter hierarchy` or
+`s1 demo --starter hierarchy --out runs/graph-demo`. Both keep the flat starter
+as the default. The hierarchy starter includes `source.json`, four disjoint
+synthetic JSONL splits, and `sample_state.json`. Compile with:
+
+```bash
+s1 compile my-graph/source.json --train my-graph/train.jsonl --validation my-graph/validation.jsonl --calibration my-graph/calibration.jsonl --test my-graph/test.jsonl --out runs/graph-compile
+s1 run runs/graph-compile/hierarchy.s1.json --state my-graph/sample_state.json
+s1 inspect runs/graph-compile/hierarchy.s1.json
+```
+
+The same four split paths are required for `s1 evaluate` of a frozen hierarchy;
+`--split` selects which registered split to measure without fitting. Hierarchy
+`inspect` shows expanded topology, source mappings, conditions, limits, final
+candidate probability scopes, gates, and provenance. `export-playground` needs
+`--stage` for one leaf. It accepts a root state only for an unconditional leaf
+whose inputs all resolve from that state; use `--resolved-state` for a concrete
+leaf input produced elsewhere. Supplied leaf input does not prove the graph
+would route there. A native request cannot encode the whole graph. All
+starter labels and mock results are synthetic and are not Jev quality claims.
+
 Use `python -m s1compiler` wherever the `s1` executable is not on PATH. Each
 subcommand has `--help`. The default backend is deliberately **mock**; live runs
 must explicitly select `--backend typesafe`.

@@ -7,13 +7,20 @@ import shutil
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from .architect import DSPyTeacher, template_program
 from .backends import AnswerCache, ManagedBackend, MockBackend, TypeSafeBackend
 from .compiler import CompileOptions, Compiler, versions
 from .data import read_jsonl
 from .errors import ConfigurationError, S1Error
 from .hardening import propose_cases
-from .hierarchy import HierarchyArtifact, HierarchySource
+from .hierarchy import HierarchyArtifact, HierarchySource, load_artifact, lower_hierarchy
+from .hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
+from .hierarchy_data import HierarchySplitGuard, read_hierarchy_jsonl
+from .hierarchy_metrics import evaluate_hierarchy
+from .hierarchy_runtime import HierarchyRuntime
+from .hierarchy_validation import validate_hierarchy_compile_inputs
 from .io import atomic_json, load_document
 from .metrics import evaluate
 from .models import Program, UseCase, project_state
@@ -63,10 +70,12 @@ def source_for(program):
     return UseCase(name=program.name, model=program.model, state=program.state, decisions=program.decisions)
 
 
-def init_project(directory: Path):
+def init_project(directory: Path, *, starter: str = "flat"):
+    if starter not in {"flat", "hierarchy"}:
+        raise ConfigurationError("Unknown starter; choose flat or hierarchy.")
     if directory.exists() and (not directory.is_dir() or any(directory.iterdir())):
         raise ConfigurationError("Target directory must be missing or empty; existing files will not be overwritten.")
-    source = Path(__file__).parent / "templates" / "support"
+    source = Path(__file__).parent / "templates" / ("support" if starter == "flat" else "hierarchy")
     shutil.copytree(source, directory, dirs_exist_ok=True)
 
 
@@ -82,6 +91,7 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create an editable support-triage project and synthetic dataset.")
     init.add_argument("directory", type=Path)
+    init.add_argument("--starter", choices=["flat", "hierarchy"], default="flat")
     draft = sub.add_parser("draft", help="Compile a typed draft, optionally using a DSPy architect.")
     draft.add_argument("spec", type=Path)
     draft.add_argument("--out", type=Path, required=True)
@@ -109,13 +119,17 @@ def build_parser():
     backend_args(run)
     ev = sub.add_parser("evaluate", help="Evaluate a frozen artifact without fitting or changing it.")
     ev.add_argument("artifact", type=Path)
-    ev.add_argument("--data", type=Path, required=True)
+    ev.add_argument("--data", type=Path)
+    for name in ("train", "validation", "calibration", "test"):
+        ev.add_argument(f"--{name}", type=Path)
+    ev.add_argument("--split", choices=["train", "validation", "calibration", "test"], default="test")
     ev.add_argument("--out", type=Path, required=True)
     backend_args(ev)
     doctor = sub.add_parser("doctor", help="Local dependency and contract checks; never calls a model.")
     doctor.add_argument("--check-optional", action="store_true")
     demo = sub.add_parser("demo", help="No-key, no-network end-to-end synthetic smoke test.")
     demo.add_argument("--out", type=Path, default=Path("runs/demo"))
+    demo.add_argument("--starter", choices=["flat", "hierarchy"], default="flat")
     inspect_p = sub.add_parser("inspect", help="Validate artifact checksum and print its typed plan.")
     inspect_p.add_argument("artifact", type=Path)
     harden = sub.add_parser("harden", help="Create robustness proposals that require human label review.")
@@ -126,8 +140,11 @@ def build_parser():
     schema.add_argument("--out", type=Path, required=True)
     export = sub.add_parser("export-playground", help="Export native state/model/questions; policies remain local.")
     export.add_argument("artifact", type=Path)
-    export.add_argument("--state", type=Path, required=True)
+    export.add_argument("--state", type=Path, help="Root state for a directly resolvable stage or flat program.")
+    export.add_argument("--resolved-state", type=Path,
+                        help="Concrete inputs already resolved for the selected leaf; does not prove its route.")
     export.add_argument("--out", type=Path, required=True)
+    export.add_argument("--stage", help="Expanded leaf stage ID for a hierarchy artifact.")
     return parser
 
 
@@ -165,13 +182,20 @@ def doctor(check_optional):
 
 def dispatch(args):
     if args.command == "init":
-        init_project(args.directory)
-        print(f"Created {args.directory}. Edit usecase.yaml; bundled labels are synthetic examples.")
+        init_project(args.directory, starter=args.starter)
+        name = "usecase.yaml" if args.starter == "flat" else "source.json"
+        print(f"Created {args.directory}. Edit {name}; bundled labels are synthetic examples.")
     elif args.command == "doctor":
         return doctor(args.check_optional)
     elif args.command == "draft":
         if args.out.exists():
             raise ConfigurationError("Draft output already exists; choose a new filename.")
+        if load_document(args.spec).get("format") == "systemone-hierarchy-source/v1":
+            if args.architect != "template":
+                raise ConfigurationError("Hierarchy DSPy structure search requires compile with four splits.")
+            lower_hierarchy(HierarchySource.load(args.spec)).save(args.out)
+            print(f"Hierarchy draft saved: {args.out}. Validate and calibrate before deployment.")
+            return 0
         source = UseCase.load(args.spec)
         program = template_program(source)
         if args.architect == "dspy":
@@ -179,6 +203,31 @@ def dispatch(args):
         program.save(args.out)
         print(f"Draft saved: {args.out}. No accuracy claims; evaluate before deployment.")
     elif args.command == "compile":
+        if load_document(args.spec).get("format") == "systemone-hierarchy-source/v1":
+            source = HierarchySource.load(args.spec)
+            draft = lower_hierarchy(source)
+            splits = {name: read_hierarchy_jsonl(getattr(args, name), draft)
+                      for name in ("train", "validation", "calibration", "test")}
+            validate_hierarchy_compile_inputs(source, splits)
+            options = HierarchyCompileOptions(architect=args.architect, optimizer=args.optimizer,
+                structural_rounds=args.structural_rounds, max_metric_calls=args.max_metric_calls,
+                seed=args.seed, max_calibration_error=args.max_calibration_error,
+                min_calibration_samples=args.min_calibration_samples)
+            if args.out.exists():
+                raise ConfigurationError("Output directory already exists; choose a new run directory.")
+            teacher = make_teacher(args) if (args.architect == "dspy" or args.optimizer == "gepa") else None
+            backend = make_backend(args)
+            try:
+                artifact, report = HierarchyCompiler(backend, teacher=teacher, options=options).compile(
+                    source, **splits)
+                ensure_new_output(args.out)
+                artifact.save(args.out / "hierarchy.s1.json")
+                atomic_json(args.out / "report.json", report)
+                print(json.dumps({"artifact": str(args.out / "hierarchy.s1.json"),
+                                  "status": report["status"], "accounting": report["accounting"]}, indent=2))
+            finally:
+                backend.close()
+            return 0
         source = UseCase.load(args.spec)
         splits = {name: read_jsonl(getattr(args, name), source)
                   for name in ("train", "validation", "calibration", "test")}
@@ -203,7 +252,28 @@ def dispatch(args):
     elif args.command == "demo":
         ensure_new_output(args.out)
         project = args.out / "project"
-        init_project(project)
+        init_project(project, starter=args.starter)
+        if args.starter == "hierarchy":
+            source = HierarchySource.load(project / "source.json")
+            draft = lower_hierarchy(source)
+            splits = {name: read_hierarchy_jsonl(project / f"{name}.jsonl", draft)
+                      for name in ("train", "validation", "calibration", "test")}
+            backend = ManagedBackend(MockBackend(), max_calls=100, cache=AnswerCache())
+            try:
+                artifact, report = HierarchyCompiler(backend, options=HierarchyCompileOptions(
+                    min_calibration_samples=1)).compile(source, **splits)
+                artifacts = args.out / "artifacts"
+                artifacts.mkdir()
+                artifact.save(artifacts / "hierarchy.s1.json")
+                atomic_json(artifacts / "report.json", report)
+                result = HierarchyRuntime(artifact, backend).run(load_document(project / "sample_state.json"))
+                atomic_json(args.out / "sample_prediction.json", result)
+                print(json.dumps({"status": "SYNTHETIC SOFTWARE SMOKE TEST — NOT JEV RESULTS",
+                                  "output": str(args.out), "requests": report["accounting"]["native_calls_this_compile"],
+                                  "optimizer": "none", "network_calls": 0}, indent=2))
+            finally:
+                backend.close()
+            return 0
         source = UseCase.load(project / "usecase.yaml")
         splits = {name: read_jsonl(project / f"{name}.jsonl", source)
                   for name in ("train", "validation", "calibration", "test")}
@@ -219,9 +289,30 @@ def dispatch(args):
         finally:
             backend.close()
     elif args.command in {"run", "evaluate"}:
-        program = Program.load(args.artifact)
+        program = load_artifact(args.artifact)
         backend = make_backend(args)
         try:
+            if isinstance(program, HierarchyArtifact):
+                if args.command == "run":
+                    result = HierarchyRuntime(program, backend,
+                        enforce_release=not args.allow_unvalidated).run(load_document(args.state))
+                    if args.out:
+                        atomic_json(args.out, result)
+                    print(json.dumps(result, indent=2))
+                    return 2 if result["status"] in {"failed", "cancelled"} else 0
+                paths = {name: getattr(args, name) for name in
+                         ("train", "validation", "calibration", "test")}
+                if any(path is None for path in paths.values()):
+                    raise ConfigurationError("Hierarchy evaluation requires --train, --validation, "
+                                             "--calibration, and --test for split isolation.")
+                splits = {name: read_hierarchy_jsonl(path, program) for name, path in paths.items()}
+                guard = HierarchySplitGuard(program, splits)
+                report, _ = evaluate_hierarchy(program, splits[args.split], backend,
+                                               guard=guard, split=args.split)
+                report["accounting"] = backend.accounting()
+                atomic_json(args.out, report)
+                print(f"Hierarchy evaluation saved: {args.out}")
+                return 0
             if args.command == "run":
                 runtime = Runtime(program, backend, enforce_release=not args.allow_unvalidated)
                 result = runtime.run(load_document(args.state))
@@ -229,6 +320,8 @@ def dispatch(args):
                     atomic_json(args.out, result)
                 print(json.dumps(result, indent=2))
             else:
+                if args.data is None:
+                    raise ConfigurationError("Flat evaluation requires --data.")
                 rows = read_jsonl(args.data, source_for(program))
                 report, _ = evaluate(program, rows, backend)
                 report["accounting"] = backend.accounting()
@@ -237,8 +330,23 @@ def dispatch(args):
         finally:
             backend.close()
     elif args.command == "inspect":
-        program = Program.load(args.artifact)
-        print(program.model_dump_json(indent=2))
+        program = load_artifact(args.artifact)
+        if isinstance(program, HierarchyArtifact):
+            print(json.dumps({"format": program.format, "graph_sha256": program.content_hash,
+                "model": program.source.model, "source_to_nodes": program.source_to_nodes,
+                "limits": program.limits.model_dump(mode="json"),
+                "nodes": [{"id": node.id, "source_id": node.source_id,
+                           "inputs": {key: value.model_dump(mode="json") for key, value in node.inputs.items()},
+                           "when": node.when.model_dump(mode="json") if node.when else None,
+                           "after": node.after, "on_review": node.on_review}
+                          for node in program.nodes],
+                "exports": [export.model_dump(mode="json") for export in program.exports],
+                "final": {key: value.model_dump(mode="json") for key, value in program.final.items()},
+                "final_review_gates": {key: {stage: gate.model_dump(mode="json")
+                    for stage, gate in gates.items()} for key, gates in program.final_review_gates.items()},
+                "provenance": program.provenance.model_dump(mode="json")}, indent=2))
+        else:
+            print(program.model_dump_json(indent=2))
     elif args.command == "harden":
         source = UseCase.load(args.spec)
         atomic_json(args.out, propose_cases(source, read_jsonl(args.data, source)))
@@ -251,7 +359,37 @@ def dispatch(args):
         atomic_json(args.out / "hierarchy-artifact.schema.json", HierarchyArtifact.model_json_schema())
         print(f"Schemas saved: {args.out}")
     elif args.command == "export-playground":
-        program = Program.load(args.artifact)
+        program = load_artifact(args.artifact)
+        if isinstance(program, HierarchyArtifact):
+            if not args.stage:
+                raise ConfigurationError("A hierarchy has no single native request; select a leaf with --stage.")
+            node = next((node for node in program.nodes if node.id == args.stage), None)
+            if node is None:
+                raise ConfigurationError(f"Unknown hierarchy leaf stage: {args.stage}")
+            from .hierarchy import RootRef
+            if args.resolved_state is not None:
+                if args.state is not None:
+                    raise ConfigurationError("Choose --state or --resolved-state for one stage, not both.")
+                mapped = load_document(args.resolved_state)
+            else:
+                if args.state is None:
+                    raise ConfigurationError("Select --state for a root-resolvable stage or --resolved-state "
+                                             "for concrete leaf inputs.")
+                if node.when or not all(isinstance(ref, RootRef) for ref in node.inputs.values()):
+                    raise ConfigurationError(f"Stage {args.stage} needs resolved routing/derived inputs; "
+                                             "a root state alone cannot export its native request.")
+                root = project_state(program.source.state, load_document(args.state))
+                mapped = {port: root[ref.root] if ref.root in root else ref.default
+                          for port, ref in node.inputs.items()
+                          if ref.root in root or ref.default is not None}
+            atomic_json(args.out, {"model": node.program.model,
+                "state": project_state(node.program.state, mapped),
+                "questions": {name: q.wire() for name, q in node.program.questions.items()}})
+            print(f"Stage request saved: {args.out}. A native one-call payload cannot represent the graph; "
+                  "supplied resolved inputs do not prove that a condition would select this stage.")
+            return 0
+        if args.resolved_state is not None or args.state is None or args.stage is not None:
+            raise ConfigurationError("Flat export requires --state and does not accept stage options.")
         atomic_json(args.out, {"model": program.model,
             "state": project_state(program.state, load_document(args.state)),
             "questions": {name: q.wire() for name, q in program.questions.items()}})
@@ -268,6 +406,10 @@ def main(argv=None):
         return 130
     except S1Error as exc:
         print(f"s1: {exc}", file=sys.stderr)
+        return 2
+    except ValidationError as exc:
+        locations = [".".join(str(part) for part in error["loc"]) for error in exc.errors()[:3]]
+        print(f"s1: invalid typed document at {', '.join(locations)}.", file=sys.stderr)
         return 2
     except (ValueError, TypeError, OSError) as exc:
         # Pydantic/JSON errors may contain sensitive values. Keep default output terse.
