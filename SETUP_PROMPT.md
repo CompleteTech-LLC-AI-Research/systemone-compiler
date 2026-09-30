@@ -81,7 +81,8 @@ has been established by the bundled synthetic fixture.
    fresh output paths. Confirm the study report says synthetic and that the
    installed wheel includes `s1-study` and hierarchy starter data. See
    `docs/HIERARCHY_MIGRATION.md` and `docs/HIERARCHY_STUDY.md`; neither workflow
-   authorizes a live study.
+   authorizes a live study. A live study additionally needs `s1-study manifest`
+   and a human-completed `s1-study review` before paid selection.
 
 ## Credentials, privacy, and live calls
 

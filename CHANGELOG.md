@@ -13,5 +13,10 @@
 - Added a preregistered three-arm study runner and offline synthetic smoke.
   Its live protocol requires independent reviewed data and separate paid and
   teacher-sharing approvals; no measured hierarchy gain is claimed.
+- Added `s1-study manifest` and `s1-study review`: a complete pre-spend live
+  manifest with every run parameter, a digest-bound human review of required
+  attestations, and a live `select --reviewed-manifest` gate that refuses any
+  parameter drift before building a provider or teacher. No live study has
+  been registered, reviewed, or executed.
 
 See [migration](docs/HIERARCHY_MIGRATION.md) for format and caller changes.
