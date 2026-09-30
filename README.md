@@ -156,6 +156,8 @@ YAML.
 The [hierarchy artifact guide](docs/HIERARCHY_ARTIFACTS.md) documents the
 versioned source/frozen graph schemas, portable local-definition expansion,
 integrity hashes, and current implementation boundary.
+The [frozen hierarchy runtime guide](docs/HIERARCHY_RUNTIME.md) shows the
+public no-key graph execution API and result statuses.
 
 | Command | Purpose |
 |---|---|
