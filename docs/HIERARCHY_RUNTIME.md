@@ -69,9 +69,44 @@ timeouts/connections; malformed answers need a separate
 remain fatal. Retry settings are recorded in the attempt ledger. The runner is
 serial, so batch-only `recover_batch` is not invoked.
 
-`result["accounting"]["attempt_ledger"]` is an in-memory handoff for the
-durable evidence work in H06. Restoring it marks unsettled calls uncertain and
-requires the same graph hash, caps, retry policy, and a reconciled owner budget.
-It does not restore completed stage outputs or provide exactly-once remote
-execution. Applications must retain this evidence securely before attempting
-recovery; H06 will define durable checkpoints and strict replay.
+## Opt-in durable evidence
+
+Pass `evidence_dir="runs/example-001"` to `run` to create a local evidence
+session. The directory must be new. Its manifest pins the graph, projected
+input fingerprint, model, provider, implementation code, request limits, retry
+policy, and original run ID. A checksummed ledger checkpoint is synced before
+each dispatch. An append-only, checksummed event stream stores each validated
+leaf response before the graph advances, plus route/stage decisions and the
+final result. The session holds an exclusive OS file lock until it exits.
+
+```python
+result = HierarchyRuntime(artifact, backend).run(
+    state, evidence_dir="runs/example-001")
+# After a process crash, use a newly constructed backend with the original cap:
+result = HierarchyRuntime(artifact, fresh_backend).run(
+    state, evidence_dir="runs/example-001", evidence_mode="resume")
+# Strict replay makes no backend request:
+verified = HierarchyRuntime(artifact, replay_backend).run(
+    state, evidence_dir="runs/example-001", evidence_mode="replay")
+```
+
+Resume revalidates the same graph, projected data, model, backend identity,
+code, limits, retry policy, and owner budget. Previously recorded stages are
+recomputed from retained raw native answers with the current frozen validator;
+only missing stages may dispatch. A crash before dispatch retains its charged
+reservation as uncertain. If a response was validated but lost before its
+event append, it cannot be recovered and a new charged attempt is needed.
+After an append, the completed event remains authoritative even if progress
+was not updated. Completed evidence bytes are never rewritten. A completed
+run replays and returns its recorded result. Replay fails closed on incomplete,
+missing, malformed, or changed evidence and never falls back to a provider.
+
+The default run retains no durable response evidence, so offline replay and
+resume are unavailable. Opt-in evidence contains native typed answers,
+derived decisions, usage, route information, and input hashes. It omits raw
+input state, credentials, HTTP headers, and teacher prompts, but it is still
+sensitive application data: retain it only as long as needed and restrict
+filesystem access. A hash is not anonymization, and the checksums are not
+authentication signatures. Local OS locking and atomic file replacement are
+required; do not share one evidence directory through an unreliable network
+filesystem. No exactly-once remote execution is promised.
