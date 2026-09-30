@@ -179,7 +179,7 @@ format dispatch, shared call budgets, result statuses, and compatibility.
 | `s1 schema --out schemas` | Export JSON schemas for tooling. |
 | `s1 doctor --check-optional` | Check installed dependency interfaces without inference. |
 | `s1 demo --out runs/demo` | Exercise the whole pipeline with a no-key synthetic fixture. |
-| `s1-study register/select/test/report` | Preregister and replay a separate three-arm hierarchy comparison. |
+| `s1-study register/manifest/review/select/test/report` | Preregister, review a live manifest, and replay a separate three-arm hierarchy comparison. |
 
 For an authored graph, run `s1 init my-graph --starter hierarchy` or
 `s1 demo --starter hierarchy --out runs/graph-demo`. Both keep the flat starter

@@ -353,3 +353,214 @@ def test_study_cli_no_key_registration_through_offline_report(tmp_path, monkeypa
     assert main(["test", "--frozen", str(frozen), "--out", str(execution)]) == 0
     assert main(["report", "--frozen", str(frozen), "--execution", str(execution)]) == 0
     assert json.loads((execution / "report.json").read_text())["synthetic"] is True
+
+
+def _live_test_double_protocol(tmp_path, study_id="test_only_live_manifest"):
+    # Registration with synthetic test-double attestation; zero provider or teacher calls.
+    from s1compiler.io import fingerprint
+    attestation = {"label_origin": "independent_human_reviewed",
+                   "test_independence_evidence": "test-only-review-record",
+                   "reviewer": "test-only-reviewer",
+                   "prior_test_input_sha256s": [fingerprint({"text": "test-only unrelated"})],
+                   "prior_test_text_normalization": "casefold_whitespace_v1",
+                   "prior_test_text_sha256s": [fingerprint("test-only unrelated")]}
+    path = tmp_path / f"{study_id}.json"
+    protocol = register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+                        SPLITS, path, study_id=study_id, mode="typesafe", selected_method="dspy_gepa",
+                        structural_rounds=1, max_metric_calls=16, teacher_max_calls=3,
+                        teacher_model="test-only/model", data_attestation=attestation,
+                        provider_call_price_cap_usd=1, teacher_call_price_cap_usd=1,
+                        external_billing_cap_usd=1_000_000)  # Test-only cap; zero calls.
+    return path, protocol
+
+
+def _completed_review(proposal):
+    from s1compiler.io import fingerprint
+    return {"format": study.LIVE_MANIFEST_REVIEW_FORMAT, "manifest_sha256": fingerprint(proposal),
+            "reviewer": "test-only-independent-reviewer", "reviewed_at": "2026-09-30T00:00:00+00:00",
+            "attestations": {name: {"attested": True, "evidence": "test-only record"}
+                             for name in study.LIVE_REVIEW_ATTESTATIONS}}
+
+
+def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path, monkeypatch):
+    from s1compiler.io import fingerprint
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
+    protocol_path, protocol = _live_test_double_protocol(tmp_path)
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    assert proposal["status"] == "proposed_unexecuted"
+    assert proposal["unspecified_parameters"] == []
+    assert proposal["protocol_sha256"] == fingerprint(protocol)
+    assert proposal["model"] == json.loads((ROOT / "source.json").read_text())["source"]["model"]
+    assert proposal["native_backend"]["identity"] == "typesafe-sdk/0.7.0"
+    assert proposal["native_backend"]["sdk_retries"] == 0
+    assert proposal["native_backend"]["credential"]["recorded_in_manifest"] is False
+    assert proposal["teacher"]["model"] == "test-only/model"
+    assert proposal["teacher"]["api_base"] == "provider_default"
+    assert proposal["teacher"]["credential"]["recorded_in_manifest"] is False
+    assert "S1_TEACHER_API_KEY" not in json.dumps({k: v for k, v in proposal["teacher"].items()
+                                                    if k != "credential"})
+    assert proposal["teacher"]["provider_request_ceiling"] == (
+        protocol["budgets"]["teacher_provider_request_ceiling"])
+    assert proposal["selection"]["min_calibration_samples"] == study.LIVE_MIN_CALIBRATION_SAMPLES
+    assert proposal["data_sharing_scope"] == "train-only teacher examples/traces"
+    assert proposal["data_attestation"]["prior_test_exclusion_count"] == 1
+    assert "prior_test_input_sha256s" not in proposal["data_attestation"]
+    assert fingerprint(protocol) in proposal["commands"]["select"]
+    assert "--reviewed-manifest" in proposal["commands"]["select"]
+    assert set(proposal["review_template"]["attestations"]) == set(study.LIVE_REVIEW_ATTESTATIONS)
+    again = study.propose_live_manifest(protocol_path, tmp_path / "manifest-again.json")
+    assert fingerprint(again) == fingerprint(proposal)
+    assert study._envelope_read(tmp_path / "manifest.json") == proposal
+    with pytest.raises(ConfigurationError, match="fresh"):
+        study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+
+    mock_path = tmp_path / "mock.json"
+    register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+             SPLITS, mock_path, study_id="synthetic_no_manifest")
+    with pytest.raises(ConfigurationError, match="mock studies"):
+        study.propose_live_manifest(mock_path, tmp_path / "mock-manifest.json")
+
+
+def test_live_manifest_review_binds_exact_digest_and_every_attestation(tmp_path):
+    from s1compiler.io import fingerprint
+    protocol_path, _ = _live_test_double_protocol(tmp_path)
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    manifest = tmp_path / "manifest.json"
+
+    def attempt(review, name):
+        path = tmp_path / f"{name}.json"
+        path.write_text(json.dumps(review))
+        return study.review_live_manifest(manifest, path, tmp_path / f"{name}-reviewed.json")
+
+    with pytest.raises(ConfigurationError, match="different manifest digest"):
+        attempt(dict(proposal["review_template"]), "unfilled")
+    wrong_digest = _completed_review(proposal) | {"manifest_sha256": "0" * 64}
+    with pytest.raises(ConfigurationError, match="different manifest digest"):
+        attempt(wrong_digest, "wrong-digest")
+    partial = _completed_review(proposal)
+    partial["attestations"]["external_billing_cap_enforced"] = {"attested": False, "evidence": "pending"}
+    with pytest.raises(ConfigurationError, match="unattested items: external_billing_cap_enforced"):
+        attempt(partial, "partial")
+    placeholder = _completed_review(proposal)
+    placeholder["attestations"]["paid_selection_calls_approved"]["evidence"] = "<record or reason>"
+    with pytest.raises(ConfigurationError, match="unattested items: paid_selection_calls_approved"):
+        attempt(placeholder, "placeholder")
+    extra = _completed_review(proposal)
+    extra["attestations"]["deployment_approved"] = {"attested": True, "evidence": "never"}
+    with pytest.raises(ConfigurationError, match="exactly the required attestations"):
+        attempt(extra, "extra")
+    bad_time = _completed_review(proposal) | {"reviewed_at": "yesterday"}
+    with pytest.raises(ConfigurationError, match="ISO 8601"):
+        attempt(bad_time, "bad-time")
+    assert not list(tmp_path.glob("*-reviewed.json"))
+
+    reviewed = attempt(_completed_review(proposal), "complete")
+    assert reviewed["status"] == "reviewed_unexecuted"
+    assert reviewed["manifest_sha256"] == fingerprint(proposal)
+    assert reviewed["selection_executed"] is False and reviewed["test_executed"] is False
+    assert reviewed["deployment_approved"] is False
+    assert study._envelope_read(tmp_path / "complete-reviewed.json") == reviewed
+
+
+def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(tmp_path, monkeypatch):
+    from s1compiler.backends import TypeSafeBackend
+    from s1compiler.io import fingerprint
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    monkeypatch.setenv("S1_TEACHER_API_BASE", "https://test-only.invalid/v1")
+    protocol_path, protocol = _live_test_double_protocol(tmp_path)
+    approvals = {"allow_paid": True, "share_feedback": True,
+                 "approved_protocol_sha256": fingerprint(protocol)}
+    with pytest.raises(ConfigurationError, match="reviewed live manifest"):
+        select_and_freeze(protocol_path, tmp_path / "no-manifest", teacher=object(), **approvals)
+    assert not (tmp_path / "no-manifest").exists()
+
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    (tmp_path / "review.json").write_text(json.dumps(_completed_review(proposal)))
+    reviewed_path = tmp_path / "reviewed.json"
+    study.review_live_manifest(tmp_path / "manifest.json", tmp_path / "review.json", reviewed_path)
+    with pytest.raises(ConfigurationError, match="Reviewed live manifest differs"):
+        select_and_freeze(protocol_path, tmp_path / "unreviewed", teacher=object(),
+                          reviewed_manifest=tmp_path / "manifest.json", **approvals)
+    with monkeypatch.context() as patch:
+        patch.setattr(TypeSafeBackend, "identity", "typesafe-sdk/0.0.0-test-only")
+        with pytest.raises(ConfigurationError, match="differs from the current protocol, software"):
+            select_and_freeze(protocol_path, tmp_path / "drifted", teacher=object(),
+                              reviewed_manifest=reviewed_path, **approvals)
+    assert not (tmp_path / "drifted").exists()
+    assert study._envelope_read(tmp_path / "manifest.json")["teacher"]["api_base"] == (
+        "https://test-only.invalid/v1")
+    with monkeypatch.context() as patch:
+        patch.setenv("S1_TEACHER_API_BASE", "https://other-endpoint.invalid/v1")
+        with pytest.raises(ConfigurationError, match="teacher endpoint"):
+            select_and_freeze(protocol_path, tmp_path / "endpoint-drift", teacher=object(),
+                              reviewed_manifest=reviewed_path, **approvals)
+    assert not (tmp_path / "endpoint-drift").exists()
+
+    # With a matching reviewed manifest the next stop is the local credential check, never a call.
+    with pytest.raises(ConfigurationError, match="TYPESAFE_API_KEY"):
+        select_and_freeze(protocol_path, tmp_path / "credential", teacher=object(),
+                          reviewed_manifest=reviewed_path, **approvals)
+    failure = json.loads((tmp_path / "credential" / "selection-failure.json").read_text())
+    assert failure["completed_arms"] == [] and failure["synthetic"] is False
+
+    mock_path = tmp_path / "mock.json"
+    register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+             SPLITS, mock_path, study_id="synthetic_mock_manifest")
+    with pytest.raises(ConfigurationError, match="Mock studies"):
+        select_and_freeze(mock_path, tmp_path / "mock-frozen", reviewed_manifest=reviewed_path)
+    assert not (tmp_path / "mock-frozen").exists()
+
+
+def test_post_freeze_live_manifest_carries_reviewed_digest_and_unapproved_test(tmp_path):
+    from s1compiler.io import fingerprint
+    protocol_path, protocol = _live_test_double_protocol(tmp_path)
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    (tmp_path / "review.json").write_text(json.dumps(_completed_review(proposal)))
+    reviewed = study.review_live_manifest(tmp_path / "manifest.json", tmp_path / "review.json",
+                                          tmp_path / "reviewed.json")
+    arms = {arm: {"content_sha256": fingerprint(arm), "provenance_sha256": fingerprint(arm + "p")}
+            for arm in study.ARMS}
+    frozen = {"protocol_sha256": fingerprint(protocol), "arms": arms,
+              "review_gates": {"semantic_review": {arm: {"status": "test-only"} for arm in arms},
+                               "data_sharing_scope": "train-only teacher examples/traces"}}
+    manifest = study._live_manifest_after_freeze(frozen, reviewed)
+    assert manifest["reviewed_manifest_sha256"] == fingerprint(reviewed)
+    assert manifest["frozen_sha256"] == fingerprint(frozen)
+    assert manifest["frozen_artifacts"] == arms
+    assert manifest["backend"] == "typesafe-sdk/0.7.0"
+    assert manifest["approval"] == {"paid_selection_calls": True, "teacher_example_sharing": True,
+                                    "external_billing_cap_verified": True,
+                                    "paid_test_calls": False, "semantic_review": False}
+    assert manifest["test_executed"] is False and manifest["deployment_approved"] is False
+
+
+def test_study_cli_manifest_and_review_run_without_keys(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    protocol_path, _ = _live_test_double_protocol(tmp_path)
+    manifest = tmp_path / "manifest.json"
+    assert main(["manifest", "--protocol", str(protocol_path), "--out", str(manifest)]) == 0
+    printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert printed["status"] == "proposed_unexecuted"
+    assert printed["unspecified_parameters"] == []
+    proposal = study._envelope_read(manifest)
+    assert printed["manifest_sha256"] == study.fingerprint(proposal)
+    template = tmp_path / "template-review.json"
+    template.write_text(json.dumps(proposal["review_template"]))
+    assert main(["review", "--manifest", str(manifest), "--review", str(template),
+                 "--out", str(tmp_path / "rejected.json")]) == 2
+    assert not (tmp_path / "rejected.json").exists()
+    completed = tmp_path / "review.json"
+    completed.write_text(json.dumps(_completed_review(proposal)))
+    assert main(["review", "--manifest", str(manifest), "--review", str(completed),
+                 "--out", str(tmp_path / "reviewed.json")]) == 0
+    printed = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert printed["status"] == "reviewed_unexecuted"
+    assert printed["selection_executed"] is False and printed["test_executed"] is False
+    assert main(["select", "--protocol", str(protocol_path), "--out", str(tmp_path / "frozen"),
+                 "--allow-paid", "--share-feedback", "--approved-protocol-sha256", "0" * 64,
+                 "--reviewed-manifest", str(tmp_path / "reviewed.json")]) == 2
+    assert not (tmp_path / "frozen").exists()

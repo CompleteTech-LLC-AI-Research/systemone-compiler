@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import random
 import re
@@ -37,6 +38,21 @@ FORMAT = "systemone-hierarchy-study-protocol/v1"
 SPLITS = ("train", "validation", "calibration", "test")
 ARMS = ("flat_authored", "hierarchy_authored", "hierarchy_selected")
 TEXT_NORMALIZATION = "casefold_whitespace_v1"
+LIVE_MANIFEST_PROPOSAL_FORMAT = "systemone-hierarchy-live-manifest-proposal/v1"
+LIVE_MANIFEST_REVIEW_FORMAT = "systemone-hierarchy-live-manifest-review/v1"
+LIVE_MANIFEST_REVIEWED_FORMAT = "systemone-hierarchy-live-manifest-reviewed/v1"
+LIVE_MIN_CALIBRATION_SAMPLES = 10
+FLAT_CALIBRATION_MAX_ERROR = 0.05
+LIVE_REVIEW_ATTESTATIONS = (
+    "dataset_labels_independently_reviewed",
+    "near_duplicate_and_semantic_independence_reviewed",
+    "prior_holdout_exclusion_lists_verified",
+    "per_call_price_caps_verified_against_quote",
+    "external_billing_cap_enforced",
+    "paid_selection_calls_approved",
+    "teacher_train_example_sharing_approved",
+)
+REDACTED_ATTESTATION_LISTS = ("prior_test_input_sha256s", "prior_test_text_sha256s")
 
 
 def _file_sha256(path: Path) -> str:
@@ -314,6 +330,169 @@ def load_protocol(path: str | Path) -> dict[str, Any]:
     return protocol
 
 
+def _unspecified_parameters(value: Any, prefix: str = "") -> list[str]:
+    if value is None:
+        return [prefix or "<root>"]
+    if isinstance(value, dict):
+        return [path for key, item in value.items()
+                for path in _unspecified_parameters(item, f"{prefix}/{key}" if prefix else str(key))]
+    if isinstance(value, list):
+        return [path for index, item in enumerate(value)
+                for path in _unspecified_parameters(item, f"{prefix}[{index}]")]
+    return []
+
+
+def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -> dict[str, Any]:
+    """Every parameter a live run will use, derived from the protocol and current code; no calls."""
+    if protocol["mode"] != "typesafe":
+        raise ConfigurationError("Only a live (typesafe) protocol needs a live manifest; mock studies "
+                                 "make no paid calls.")
+    import inspect
+    from .architect import DSPyTeacher
+    teacher_defaults = inspect.signature(DSPyTeacher.__init__).parameters
+    backend_defaults = inspect.signature(TypeSafeBackend.__init__).parameters
+    optimization = protocol["optimization"]
+    attestation = {key: value for key, value in protocol["data_attestation"].items()
+                   if key not in REDACTED_ATTESTATION_LISTS}
+    proposal = {
+        "format": LIVE_MANIFEST_PROPOSAL_FORMAT,
+        "status": "proposed_unexecuted",
+        "study_id": protocol["study_id"],
+        "protocol_sha256": fingerprint(protocol),
+        "registered_at": protocol["registered_at"],
+        "model": source.source.model,
+        "source_contract_sha256": protocol["source_contract_sha256"],
+        "authored_graph_sha256": protocol["authored_graph_sha256"],
+        "candidate_graph_sha256": protocol["candidate_graph_sha256"],
+        "flat_program_sha256": protocol["flat_program_sha256"],
+        "datasets": {name: {"content_sha256": entry["content_sha256"], "n": entry["n"],
+                            "n_groups": entry["n_groups"]}
+                     for name, entry in protocol["datasets"].items()},
+        "data_attestation": attestation,
+        "data_sharing_scope": "train-only teacher examples/traces",
+        "native_backend": {"identity": TypeSafeBackend.identity,
+                           "sdk_retries": 0,
+                           "request_timeout_s": backend_defaults["timeout"].default,
+                           "credential": {"environment_variable": "TYPESAFE_API_KEY",
+                                          "recorded_in_manifest": False}},
+        "teacher": {"model": optimization["teacher_model"],
+                    "signature_ceiling": optimization["teacher_max_calls"],
+                    "provider_request_ceiling": protocol["budgets"]["teacher_provider_request_ceiling"],
+                    "max_tokens": optimization["teacher_max_tokens"],
+                    # The endpoint decides provider and price, so it is pinned here and
+                    # re-resolved at selection; the credential itself is never recorded.
+                    "api_base": os.environ.get("S1_TEACHER_API_BASE") or "provider_default",
+                    "temperature": "provider_default",
+                    "request_timeout_s": teacher_defaults["timeout"].default,
+                    "max_prompt_chars": teacher_defaults["max_prompt_chars"].default,
+                    "framework_caches": "disabled",
+                    "sdk_retries": 0,
+                    "credential": {"environment_variable": "S1_TEACHER_API_KEY",
+                                   "recorded_in_manifest": False}},
+        "selection": {"method": protocol["selected_method"],
+                      "structural_rounds": optimization["structural_rounds"],
+                      "max_metric_calls": optimization["max_metric_calls"],
+                      "selection_seed": protocol["analysis"]["selection_seed"],
+                      "min_calibration_samples": LIVE_MIN_CALIBRATION_SAMPLES,
+                      "flat_calibration_max_error": FLAT_CALIBRATION_MAX_ERROR},
+        "analysis": protocol["analysis"],
+        "call_and_spend_limits": protocol["budgets"],
+        "frozen_graph_digests": "assigned by live selection and recorded in frozen.json and "
+                                "live-manifest.json; they need a separate semantic review before test",
+        "commands": {
+            "select": "s1-study select --protocol <protocol> --out <fresh directory> --allow-paid "
+                      "--share-feedback --approved-protocol-sha256 " + fingerprint(protocol) +
+                      " --reviewed-manifest <reviewed manifest>",
+            "test": "s1-study test --frozen <selection directory> --out <fresh directory> --allow-paid "
+                    "--semantic-review-approved --reviewed-frozen-sha256 <frozen.json sha256 after review>"},
+        "review_requirements": list(LIVE_REVIEW_ATTESTATIONS),
+        "review_template": {"format": LIVE_MANIFEST_REVIEW_FORMAT,
+                            "manifest_sha256": "<sha256 printed by s1-study manifest>",
+                            "reviewer": "<name or role>", "reviewed_at": "<ISO 8601 timestamp>",
+                            "attestations": {name: {"attested": False, "evidence": "<record or reason>"}
+                                             for name in LIVE_REVIEW_ATTESTATIONS}},
+        "limitations": protocol["limitations"] + [
+            "Frozen graph digests, semantic review, and paid test approval follow live selection.",
+            "Credentials are resolved from the local environment at run time and never recorded."],
+    }
+    unspecified = _unspecified_parameters({key: value for key, value in proposal.items()
+                                           if key != "review_template"})
+    if unspecified:
+        raise ConfigurationError("Live manifest has unspecified parameters: " + ", ".join(unspecified))
+    proposal["unspecified_parameters"] = []
+    return proposal
+
+
+def propose_live_manifest(protocol_path: str | Path, out: str | Path) -> dict[str, Any]:
+    """Write the complete pre-spend live manifest for human review; never construct a provider."""
+    output = Path(out)
+    if output.exists():
+        raise ConfigurationError("Choose a fresh live manifest path; proposals are immutable.")
+    protocol = load_protocol(protocol_path)
+    paths = {key: Path(value["path"]) for key, value in protocol["source"].items()}
+    split_paths = {name: Path(value["path"]) for name, value in protocol["datasets"].items()}
+    source, *_ = _inputs(paths["source"], paths["candidate"], paths["flat"], split_paths)
+    proposal = _live_manifest_proposal(protocol, source)
+    _envelope_write(output, proposal)
+    return proposal
+
+
+def _validate_live_review(proposal: dict[str, Any], review: Any) -> None:
+    if (not isinstance(review, dict) or review.get("format") != LIVE_MANIFEST_REVIEW_FORMAT or
+        review.get("manifest_sha256") != fingerprint(proposal)):
+        raise ConfigurationError("Live manifest review is missing or refers to a different manifest digest.")
+    if (not isinstance(review.get("reviewer"), str) or not review["reviewer"].strip() or
+        not isinstance(review.get("reviewed_at"), str)):
+        raise ConfigurationError("Live manifest review needs a reviewer and an ISO 8601 review time.")
+    try:
+        datetime.fromisoformat(review["reviewed_at"])
+    except ValueError as exc:
+        raise ConfigurationError("Live manifest review time is not ISO 8601.") from exc
+    attestations = review.get("attestations")
+    if not isinstance(attestations, dict) or set(attestations) != set(LIVE_REVIEW_ATTESTATIONS):
+        raise ConfigurationError("Live manifest review must answer exactly the required attestations.")
+    incomplete = [name for name, item in attestations.items()
+                  if not isinstance(item, dict) or item.get("attested") is not True or
+                  not isinstance(item.get("evidence"), str) or not item["evidence"].strip() or
+                  item["evidence"].strip().startswith("<")]
+    if incomplete:
+        raise ConfigurationError("Live manifest review has unattested items: " + ", ".join(sorted(incomplete)))
+
+
+def review_live_manifest(manifest_path: str | Path, review_path: str | Path,
+                         out: str | Path) -> dict[str, Any]:
+    """Bind a human review to one exact manifest digest; authorizes nothing by itself."""
+    output = Path(out)
+    if output.exists():
+        raise ConfigurationError("Choose a fresh reviewed manifest path.")
+    proposal = _envelope_read(Path(manifest_path))
+    if proposal.get("format") != LIVE_MANIFEST_PROPOSAL_FORMAT or proposal.get("unspecified_parameters") != []:
+        raise DataError("Unsupported or incomplete live manifest proposal.")
+    review = load_document(review_path)
+    _validate_live_review(proposal, review)
+    reviewed = {"format": LIVE_MANIFEST_REVIEWED_FORMAT, "status": "reviewed_unexecuted",
+                "study_id": proposal["study_id"], "protocol_sha256": proposal["protocol_sha256"],
+                "manifest_sha256": fingerprint(proposal), "proposal": proposal, "review": review,
+                "selection_executed": False, "test_executed": False, "deployment_approved": False}
+    _envelope_write(output, reviewed)
+    return reviewed
+
+
+def _load_reviewed_manifest(path: str | Path | None, protocol: dict[str, Any],
+                            source: HierarchySource) -> dict[str, Any]:
+    if path is None:
+        raise ConfigurationError("Live selection requires a reviewed live manifest: run "
+                                 "s1-study manifest, complete its review, then s1-study review.")
+    reviewed = _envelope_read(Path(path))
+    if (reviewed.get("format") != LIVE_MANIFEST_REVIEWED_FORMAT or
+        reviewed.get("proposal") != _live_manifest_proposal(protocol, source) or
+        reviewed.get("manifest_sha256") != fingerprint(reviewed["proposal"])):
+        raise ConfigurationError("Reviewed live manifest differs from the current protocol, software "
+                                 "parameters, or teacher endpoint; propose and review it again.")
+    _validate_live_review(reviewed["proposal"], reviewed.get("review"))
+    return reviewed
+
+
 def _study_backend(protocol: dict[str, Any], arm: str, *, phase: str,
                    allow_paid: bool, backend_factory=None) -> ManagedBackend:
     ceiling = protocol["budgets"]["by_arm"][arm][
@@ -332,6 +511,7 @@ def _study_backend(protocol: dict[str, Any], arm: str, *, phase: str,
 def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                       allow_paid: bool = False, share_feedback: bool = False,
                       approved_protocol_sha256: str | None = None,
+                      reviewed_manifest: str | Path | None = None,
                       backend_factory=None, teacher=None) -> dict[str, Any]:
     """Select on validation, fit on calibration, then seal all arms before test."""
     protocol = load_protocol(protocol_path)
@@ -340,6 +520,19 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
     ):
         raise ConfigurationError("Live selection requires separate paid, teacher-sharing, and exact "
                                  "preregistered-protocol approvals.")
+    if protocol["mode"] != "typesafe" and reviewed_manifest is not None:
+        raise ConfigurationError("Mock studies make no paid calls and take no live manifest.")
+    out = Path(out)
+    if out.exists():
+        raise ConfigurationError("Choose a new selection directory; frozen study state is immutable.")
+    paths = {key: Path(value["path"]) for key, value in protocol["source"].items()}
+    split_paths = {name: Path(value["path"]) for name, value in protocol["datasets"].items()}
+    source, candidate, flat, splits, _, candidate_draft = _inputs(
+        paths["source"], paths["candidate"], paths["flat"], split_paths)
+    reviewed = None
+    if protocol["mode"] == "typesafe":
+        # The exact reviewed parameters gate every provider or teacher construction below.
+        reviewed = _load_reviewed_manifest(reviewed_manifest, protocol, source)
     if protocol["selected_method"] == "dspy_gepa" and teacher is None:
         if protocol["mode"] != "typesafe":
             raise ConfigurationError("Mock GEPA study needs an explicit synthetic teacher test double.")
@@ -348,13 +541,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                               share_feedback=share_feedback,
                               max_calls=protocol["optimization"]["teacher_max_calls"],
                               max_tokens=protocol["optimization"]["teacher_max_tokens"])
-    out = Path(out)
-    if out.exists():
-        raise ConfigurationError("Choose a new selection directory; frozen study state is immutable.")
-    paths = {key: Path(value["path"]) for key, value in protocol["source"].items()}
-    split_paths = {name: Path(value["path"]) for name, value in protocol["datasets"].items()}
-    source, candidate, flat, splits, _, candidate_draft = _inputs(
-        paths["source"], paths["candidate"], paths["flat"], split_paths)
+    min_calibration_samples = 1 if protocol["mode"] == "mock" else LIVE_MIN_CALIBRATION_SAMPLES
     out.mkdir(parents=True, exist_ok=False)
     _envelope_write(out / "selection-started.json", {
         "protocol_sha256": fingerprint(protocol), "status": "started",
@@ -369,8 +556,8 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
             flat_validation, _ = evaluate(flat, splits["validation"], flat_backend)
             _, calibration_results = evaluate(flat, splits["calibration"], flat_backend)
             fitted, calibration_fit = fit_policies(
-                flat, splits["calibration"], calibration_results, max_error=0.05,
-                min_samples=1 if protocol["mode"] == "mock" else 10)
+                flat, splits["calibration"], calibration_results, max_error=FLAT_CALIBRATION_MAX_ERROR,
+                min_samples=min_calibration_samples)
             fitted.provenance = {"status": "synthetic" if flat_backend.synthetic else "measured",
                                  "deployment_approved": False, "study_id": protocol["study_id"],
                                  "protocol_sha256": fingerprint(protocol), "arm": current,
@@ -391,7 +578,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
         try:
             authored_compiler = HierarchyCompiler(
                 authored_backend, options=HierarchyCompileOptions(
-                    min_calibration_samples=1 if protocol["mode"] == "mock" else 10))
+                    min_calibration_samples=min_calibration_samples))
             authored_session = authored_compiler.select(source, **splits)
             authored_compiler.calibrate(authored_session)
             authored_artifact = authored_compiler.freeze(authored_session)
@@ -421,15 +608,14 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                     raise DataError("Failed candidate has no validation quality for selection.")
                 if candidate_quality["objective"] > authored_session.validation_report["objective"]:
                     chosen = candidate
-                options = HierarchyCompileOptions(
-                    min_calibration_samples=1 if protocol["mode"] == "mock" else 10)
+                options = HierarchyCompileOptions(min_calibration_samples=min_calibration_samples)
             else:
                 options = HierarchyCompileOptions(
                     architect="dspy", optimizer="gepa",
                     structural_rounds=protocol["optimization"]["structural_rounds"],
                     max_metric_calls=protocol["optimization"]["max_metric_calls"],
                     seed=protocol["analysis"]["selection_seed"],
-                    min_calibration_samples=1 if protocol["mode"] == "mock" else 10)
+                    min_calibration_samples=min_calibration_samples)
             selected_compiler = HierarchyCompiler(selected_backend, teacher=teacher, options=options)
             selected_session = selected_compiler.select(chosen, **splits)
             selected_compiler.calibrate(selected_session)
@@ -459,31 +645,13 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                                    "graph_digests": {arm: item["content_sha256"] for arm, item in arms.items()},
                                    "data_sharing_scope": "train-only teacher examples/traces" if teacher else "none",
                                    "paid_calls_authorized_for_this_run": bool(allow_paid),
-                                   "teacher_sharing_authorized_for_this_run": bool(share_feedback)},
+                                   "teacher_sharing_authorized_for_this_run": bool(share_feedback),
+                                   "reviewed_manifest_sha256": fingerprint(reviewed) if reviewed else None},
                   "limits": protocol["budgets"],
                   "live_test_state": "unexecuted_requires_exact_frozen_review"}
         _envelope_write(out / "frozen.json", frozen)
-        if protocol["mode"] == "typesafe":
-            _envelope_write(out / "live-manifest.json", {
-                "format": "systemone-hierarchy-live-manifest/v1",
-                "study_id": protocol["study_id"], "status": "unexecuted_requires_separate_approval",
-                "model": source.source.model, "backend": "typesafe-sdk/0.7.0",
-                "protocol_sha256": fingerprint(protocol), "frozen_sha256": fingerprint(frozen),
-                "source_contract_sha256": protocol["source_contract_sha256"],
-                "dataset_hashes": {name: entry["content_sha256"]
-                                   for name, entry in protocol["datasets"].items()},
-                "test_independence": protocol["data_attestation"],
-                "frozen_artifacts": {arm: {"content_sha256": item["content_sha256"],
-                                           "provenance_sha256": item["provenance_sha256"]}
-                                     for arm, item in arms.items()},
-                "semantic_review": frozen["review_gates"]["semantic_review"],
-                "data_sharing_scope": frozen["review_gates"]["data_sharing_scope"],
-                "teacher_model": protocol["optimization"]["teacher_model"],
-                "teacher_max_tokens": protocol["optimization"]["teacher_max_tokens"],
-                "call_and_spend_limits": protocol["budgets"],
-                "approval": {"paid_test_calls": False, "semantic_review": False,
-                             "external_billing_cap_verified": False},
-                "deployment_approved": False})
+        if reviewed is not None:
+            _envelope_write(out / "live-manifest.json", _live_manifest_after_freeze(frozen, reviewed))
         return frozen
     except BaseException as exc:
         atomic_json(out / "selection-failure.json", {"arm": current, "exception_type": type(exc).__name__,
@@ -491,6 +659,32 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                                                       "synthetic": protocol["mode"] == "mock",
                                                       "test_executed": False})
         raise
+
+
+def _live_manifest_after_freeze(frozen: dict[str, Any], reviewed: dict[str, Any]) -> dict[str, Any]:
+    """Post-selection manifest: reviewed pre-spend parameters plus frozen digests awaiting review."""
+    proposal, attested = reviewed["proposal"], reviewed["review"]["attestations"]
+    return {"format": "systemone-hierarchy-live-manifest/v1",
+            "study_id": proposal["study_id"], "status": "frozen_unexecuted_requires_separate_test_approval",
+            "model": proposal["model"], "backend": proposal["native_backend"]["identity"],
+            "protocol_sha256": frozen["protocol_sha256"], "frozen_sha256": fingerprint(frozen),
+            "reviewed_manifest_sha256": fingerprint(reviewed),
+            "reviewed_by": reviewed["review"]["reviewer"],
+            "source_contract_sha256": proposal["source_contract_sha256"],
+            "dataset_hashes": {name: entry["content_sha256"] for name, entry in proposal["datasets"].items()},
+            "test_independence": proposal["data_attestation"],
+            "frozen_artifacts": {arm: {"content_sha256": item["content_sha256"],
+                                       "provenance_sha256": item["provenance_sha256"]}
+                                 for arm, item in frozen["arms"].items()},
+            "semantic_review": frozen["review_gates"]["semantic_review"],
+            "data_sharing_scope": frozen["review_gates"]["data_sharing_scope"],
+            "teacher": proposal["teacher"], "selection": proposal["selection"],
+            "call_and_spend_limits": proposal["call_and_spend_limits"],
+            "approval": {"paid_selection_calls": attested["paid_selection_calls_approved"]["attested"],
+                         "teacher_example_sharing": attested["teacher_train_example_sharing_approved"]["attested"],
+                         "external_billing_cap_verified": attested["external_billing_cap_enforced"]["attested"],
+                         "paid_test_calls": False, "semantic_review": False},
+            "test_executed": False, "deployment_approved": False}
 
 
 def load_frozen(directory: str | Path) -> tuple[dict[str, Any], dict[str, Program | HierarchyArtifact]]:
@@ -908,6 +1102,16 @@ def main(argv: list[str] | None = None) -> int:
     selection.add_argument("--allow-paid", action="store_true")
     selection.add_argument("--share-feedback", action="store_true")
     selection.add_argument("--approved-protocol-sha256")
+    selection.add_argument("--reviewed-manifest", type=Path,
+                           help="Reviewed live manifest from `s1-study review`; required for live studies.")
+    manifest = sub.add_parser("manifest", help="Write the complete pre-spend live manifest; no calls.")
+    manifest.add_argument("--protocol", type=Path, required=True)
+    manifest.add_argument("--out", type=Path, required=True)
+    review = sub.add_parser("review", help="Bind a completed human review to one manifest digest.")
+    review.add_argument("--manifest", type=Path, required=True)
+    review.add_argument("--review", type=Path, required=True,
+                        help="Completed copy of the proposal's review_template (JSON or YAML).")
+    review.add_argument("--out", type=Path, required=True)
     test = sub.add_parser("test", help="Run only a frozen study's held-out roots.")
     test.add_argument("--frozen", type=Path, required=True)
     test.add_argument("--out", type=Path, required=True)
@@ -939,10 +1143,20 @@ def main(argv: list[str] | None = None) -> int:
                                 external_billing_cap_usd=args.external_billing_cap_usd)
             print(json.dumps({"status": protocol["status"], "protocol_sha256": fingerprint(protocol),
                               "native_attempt_ceiling_total": protocol["budgets"]["native_attempt_ceiling_total"]}))
+        elif args.command == "manifest":
+            proposal = propose_live_manifest(args.protocol, args.out)
+            print(json.dumps({"status": proposal["status"], "manifest_sha256": fingerprint(proposal),
+                              "unspecified_parameters": proposal["unspecified_parameters"]}))
+        elif args.command == "review":
+            reviewed = review_live_manifest(args.manifest, args.review, args.out)
+            print(json.dumps({"status": reviewed["status"],
+                              "reviewed_manifest_sha256": fingerprint(reviewed),
+                              "selection_executed": False, "test_executed": False}))
         elif args.command == "select":
             frozen = select_and_freeze(args.protocol, args.out, allow_paid=args.allow_paid,
                                        share_feedback=args.share_feedback,
-                                       approved_protocol_sha256=args.approved_protocol_sha256)
+                                       approved_protocol_sha256=args.approved_protocol_sha256,
+                                       reviewed_manifest=args.reviewed_manifest)
             print(json.dumps({"status": frozen["status"], "frozen_sha256": fingerprint(frozen),
                               "test_executed": False}))
         elif args.command == "test":

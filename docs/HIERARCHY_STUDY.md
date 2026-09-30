@@ -78,15 +78,36 @@ cap large enough for the declared worst case. These caps are assumptions until
 independently verified; hashes are integrity checks, not signatures or
 anonymization.
 
-Registering a live protocol makes **zero** provider calls. Live selection then
-requires separate `--allow-paid`, `--share-feedback`, and an exact
-`--approved-protocol-sha256`; it creates frozen graph digests and
-`live-manifest.json` with data scope, price assumptions, call ceilings, and
-semantic-review changes. Live held-out test requires another explicit paid
-approval, `--semantic-review-approved`, and the exact
-`--reviewed-frozen-sha256`. No live study or teacher upload is authorized by
-this document. The checked-in synthetic fixture is unsuitable for a live gain
-claim; no independent human-labeled live manifest or measured result is bundled.
+Registering a live protocol makes **zero** provider calls. So does
+`s1-study manifest --protocol <protocol> --out <manifest>`, which writes the
+complete pre-spend live manifest: pinned Jev model, native SDK identity with
+retries disabled, teacher model, endpoint, and provider ceilings, selection method, seeds,
+calibration minimums, per-arm call ceilings, price caps and worst-case spend,
+dataset digests, the redacted independence attestation, the exact `select` and
+`test` commands, and a `review_template`. It refuses mock protocols and any
+protocol with an unspecified parameter; credentials are never recorded. A human
+reviewer copies the template, fills in the printed manifest digest, their name
+or role, an ISO 8601 time, and evidence for every required attestation (dataset
+labels, near-duplicate and semantic independence, exclusion lists, price quote,
+externally enforced billing cap, paid selection, and train-only teacher
+sharing), then runs `s1-study review --manifest <manifest> --review <filled
+review> --out <reviewed manifest>`. Review binds the attestations to one exact
+manifest digest; it rejects placeholders, missing or extra items, and any other
+digest, and it authorizes nothing by itself.
+
+Live selection then requires separate `--allow-paid`, `--share-feedback`, an
+exact `--approved-protocol-sha256`, and `--reviewed-manifest`. Before any
+provider or teacher object is built, it regenerates the manifest from the
+protocol, current code, and the current teacher endpoint, and refuses to run if
+anything differs from what was reviewed, so a live run cannot change an
+unspecified parameter. It then creates
+frozen graph digests and `live-manifest.json`, which records the reviewed
+manifest digest and marks the held-out test and semantic review as unapproved.
+Live held-out test requires another explicit paid approval,
+`--semantic-review-approved`, and the exact `--reviewed-frozen-sha256`. No live
+study or teacher upload is authorized by this document. The checked-in synthetic
+fixture is unsuitable for a live gain claim; no independent human-labeled
+dataset, completed review, or measured result is bundled.
 
 Use `s1-study --help` and each subcommand's `--help` for the exact arguments.
 No automatic gain or production-readiness claim follows from a positive
