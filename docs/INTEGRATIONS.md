@@ -59,6 +59,8 @@ The real-package optional GEPA test runs that engine with a fake deterministic
 proposer and mock backend, without paid inference. It verifies engine/adapter
 compatibility only; it is not a prompt-quality benchmark. The combined real DSPy
 teacher + TypeSafe + GEPA workflow still needs authorized end-to-end verification.
+An additional offline graph adapter test runs installed GEPA over complete
+synthetic hierarchy executions with no provider calls.
 
 ## Environment
 

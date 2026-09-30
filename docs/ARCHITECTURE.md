@@ -75,6 +75,11 @@ reflection callable, and no emulated Jev chat-completion endpoint.
 GEPA selection uses validation scores. Reflection comes from the training path.
 No dataset records from calibration/test enter the teacher. Repeated validation
 selection can still overfit; validation is not the final generalization estimate.
+For hierarchy, qualified expanded-stage component keys preserve reused-subgraph
+identity. `HierarchyGEPAAdapter` scores complete root executions, and only
+registered train traces enter reflection. GEPA metric rows and native child
+requests have separate counters and budgets. Structure is selected first;
+wording is selected next; final review gates are fitted after both.
 
 ## Supported structural search
 

@@ -16,6 +16,8 @@ from .hierarchy import (FinalReviewGate, HierarchyArtifact, HierarchyProvenance,
                         HierarchySource, lower_hierarchy)
 from .hierarchy_architect import semantic_review_manifest
 from .hierarchy_data import HierarchySplitGuard, HierarchyTeacherInputs
+from .hierarchy_gepa import (components_from_hierarchy, hierarchy_text_structure_hash,
+                             optimize_hierarchy_gepa)
 from .hierarchy_metrics import evaluate_hierarchy, paired_flat_hierarchy
 from .hierarchy_validation import validate_hierarchy_artifact, validate_hierarchy_compile_inputs
 from .io import fingerprint
@@ -29,16 +31,21 @@ class HierarchyCompileOptions:
     architect: str = "template"
     optimizer: str = "none"
     structural_rounds: int = 0
+    max_metric_calls: int = 128
+    seed: int = 7
     max_calibration_error: float = 0.05
     min_calibration_samples: int = 10
 
     def __post_init__(self):
-        if self.architect not in {"template", "dspy"} or self.optimizer != "none":
-            raise ConfigurationError("Hierarchy compile supports template or DSPy structure, with no text optimizer yet.")
+        if self.architect not in {"template", "dspy"} or self.optimizer not in {"none", "gepa"}:
+            raise ConfigurationError("Unknown hierarchy architect or optimizer.")
         if (type(self.structural_rounds) is not int or not 0 <= self.structural_rounds <= 10 or
                 (self.architect == "template" and self.structural_rounds != 0) or
                 (self.architect == "dspy" and self.structural_rounds == 0)):
             raise ConfigurationError("DSPy structure search needs 1..10 rounds; template needs zero.")
+        if (type(self.max_metric_calls) is not int or self.max_metric_calls < 1 or
+                type(self.seed) is not int):
+            raise ConfigurationError("Invalid GEPA metric budget or deterministic seed.")
         if (type(self.max_calibration_error) not in (int, float) or
                 not math.isfinite(self.max_calibration_error) or
                 not 0 <= self.max_calibration_error <= 1 or
@@ -65,6 +72,7 @@ class HierarchyCompileSession:
     observed_nodes: set[str]
     proposal_history: list[dict[str, Any]]
     semantic_review: dict[str, Any]
+    optimization: dict[str, Any]
     phase: str = "selected"
     calibration_report: dict[str, Any] | None = None
     calibration_fit: dict[str, Any] | None = None
@@ -142,8 +150,8 @@ class HierarchyCompiler:
         splits = {"train": train, "validation": validation, "calibration": calibration, "test": test}
         preflight = validate_hierarchy_compile_inputs(source, splits)
         fixed_source = source.model_copy(deep=True)
-        if self.options.architect == "dspy" and self.teacher is None:
-            raise ConfigurationError("DSPy hierarchy search requires an explicitly configured teacher.")
+        if (self.options.architect == "dspy" or self.options.optimizer == "gepa") and self.teacher is None:
+            raise ConfigurationError("Hierarchy structure or wording search requires an explicit teacher.")
         candidate = lower_hierarchy(source)
         guard = preflight.split_guard
         if guard.graph_sha256 != candidate.content_hash:
@@ -199,13 +207,45 @@ class HierarchyCompiler:
                 pair = _paired(candidate, list(stable["validation"]), graph_results, flat_results)
                 observed = {stage for result in [*train_results, *graph_results]
                             for stage in result["executed"]}
+        optimization = {"engine": "none"}
+        text_changes = []
+        if self.options.optimizer == "gepa":
+            optimized, optimization = optimize_hierarchy_gepa(
+                candidate, {name: list(rows) for name, rows in stable.items()},
+                self.backend, self.teacher, max_metric_calls=self.options.max_metric_calls,
+                seed=self.options.seed)
+            optimized_guard = HierarchySplitGuard(
+                optimized, {name: list(rows) for name, rows in stable.items()})
+            measured, optimized_results = evaluate_hierarchy(
+                optimized, list(stable["validation"]), self.backend,
+                guard=optimized_guard, split="validation")
+            history.append({"phase": "gepa_wording", "graph_sha256": optimized.content_hash,
+                            "validation_objective": measured["objective"],
+                            "native_stage_calls": optimization["native_stage_calls"]})
+            optimization["accepted_by_compiler"] = measured["objective"] > validation_report["objective"]
+            if optimization["accepted_by_compiler"]:
+                optimized_train, optimized_train_results = evaluate_hierarchy(
+                    optimized, list(stable["train"]), self.backend,
+                    guard=optimized_guard, split="train")
+                before_text, after_text = components_from_hierarchy(candidate), components_from_hierarchy(optimized)
+                text_changes = [{"path": key, "before_sha256": fingerprint(before_text[key]),
+                                 "after_sha256": fingerprint(after_text[key])}
+                                for key in before_text if before_text[key] != after_text[key]]
+                candidate, guard = optimized, optimized_guard
+                train_report, train_results = optimized_train, optimized_train_results
+                validation_report, graph_results = measured, optimized_results
+                pair = _paired(candidate, list(stable["validation"]), graph_results, flat_results)
+                observed = {stage for result in [*train_results, *graph_results]
+                            for stage in result["executed"]}
+        review = semantic_review_manifest(fixed_source, selected_source)
+        review["changed_child_prompts"].extend(text_changes)
         return HierarchyCompileSession(
             source=fixed_source, selected_source=selected_source, splits=stable,
             candidate=candidate, guard=guard,
             flat_baseline=flat, owner_start_calls=start, owner_request_limit=self.backend.budget.maximum,
             train_report=train_report, validation_report=validation_report,
             baseline_validation=baseline_report, validation_pair=pair, observed_nodes=observed,
-            proposal_history=history, semantic_review=semantic_review_manifest(fixed_source, selected_source))
+            proposal_history=history, semantic_review=review, optimization=optimization)
 
     def calibrate(self, session: HierarchyCompileSession) -> HierarchyCompileSession:
         if session.phase != "selected":
@@ -223,8 +263,12 @@ class HierarchyCompiler:
     def freeze(self, session: HierarchyCompileSession) -> HierarchyArtifact:
         if session.phase != "calibrated":
             raise ConfigurationError("Freeze follows calibration exactly once.")
-        if (session.candidate.content_hash != session.guard.graph_sha256 or
-                lower_hierarchy(session.selected_source).content_hash != session.candidate.content_hash or any(
+        selected_structure = lower_hierarchy(session.selected_source)
+        same_structure = (selected_structure.content_hash == session.candidate.content_hash or
+                          (session.optimization["engine"] == "gepa" and
+                           hierarchy_text_structure_hash(selected_structure) ==
+                           hierarchy_text_structure_hash(session.candidate)))
+        if (session.candidate.content_hash != session.guard.graph_sha256 or not same_structure or any(
             dataset_hash(list(session.splits[name])) != dataset_hash(list(session.guard.splits[name]))
             for name in session.splits
         )):
@@ -269,6 +313,7 @@ class HierarchyCompiler:
         frozen.provenance.evidence["semantic_review"] = copy.deepcopy(session.semantic_review)
         frozen.provenance.evidence["proposal_history"] = copy.deepcopy(session.proposal_history)
         frozen.provenance.evidence["teacher"] = (self.teacher.accounting() if self.teacher else None)
+        frozen.provenance.evidence["optimization"] = copy.deepcopy(session.optimization)
         frozen = HierarchyArtifact.model_validate(frozen.model_dump(mode="json"))
         session.frozen = frozen
         session.frozen_guard = frozen_guard
@@ -301,6 +346,7 @@ class HierarchyCompiler:
                               "baseline_validation": session.baseline_validation,
                               "paired_validation": session.validation_pair},
                 "semantic_review": session.semantic_review,
+                "optimization": session.optimization,
                 "calibration": {"before_gates": session.calibration_report,
                                 "fit": session.calibration_fit,
                                 "after_gates": session.frozen_calibration_report},
