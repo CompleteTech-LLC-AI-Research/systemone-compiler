@@ -231,6 +231,13 @@ class HierarchyProvenance(StrictModel):
     evidence: dict[str, JsonValue] = Field(default_factory=dict)
 
 
+class FinalReviewGate(StrictModel):
+    """Post-route review policy for one public output and selected origin."""
+
+    min_gate: float = Field(default=0.0, strict=True, ge=0, le=1, allow_inf_nan=False)
+    force_review: bool = Field(default=False, strict=True)
+
+
 class HierarchyArtifact(StrictModel):
     format: Literal["systemone-hierarchy/v1"]
     source: UseCase
@@ -238,6 +245,7 @@ class HierarchyArtifact(StrictModel):
     nodes: list[LoweredNode]
     exports: list[LoweredExport]
     final: dict[str, FinalMapping]
+    final_review_gates: dict[str, dict[str, FinalReviewGate]] = Field(default_factory=dict)
     source_to_nodes: dict[str, list[str]]
     provenance: HierarchyProvenance = Field(default_factory=HierarchyProvenance)
 
@@ -257,6 +265,16 @@ class HierarchyArtifact(StrictModel):
             raise ValueError("Leaf target model differs from source model.")
         if set(self.final) != set(self.source.decisions):
             raise ValueError("Artifact final mappings differ from the source contract.")
+        if not set(self.final_review_gates) <= set(self.final) or any(
+            not gates or not set(gates) <= {candidate.stage for candidate in self.final[name].candidates}
+            for name, gates in self.final_review_gates.items()
+        ):
+            raise ValueError("Final review gates must name public outputs and candidate origins.")
+        if self.provenance.evidence.get("review_policy") == "post_route_only" and any(
+            set(self.final_review_gates.get(name, {})) != {candidate.stage for candidate in mapping.candidates}
+            for name, mapping in self.final.items()
+        ):
+            raise ValueError("Compiled final review gates must cover every public candidate origin.")
         output_ports = {node.id: node.program.decisions for node in self.nodes}
         output_ports.update({export.id: export.output_contracts for export in self.exports})
         for node in self.nodes:
@@ -302,11 +320,18 @@ class HierarchyArtifact(StrictModel):
                 raise ValueError("Measured hierarchy requires a composition report checksum.")
             if any(node.program.provenance.get("status") != "measured" for node in self.nodes):
                 raise ValueError("Measured hierarchy cannot contain unmeasured leaves.")
+        child_hashes = self.provenance.evidence.get("child_hashes")
+        if child_hashes is not None and child_hashes != {
+            node.id: node.program.content_hash for node in self.nodes
+        }:
+            raise ValueError("Frozen child hashes differ from provenance.")
         return self
 
     @property
     def content_hash(self) -> str:
         semantic = self.model_dump(mode="json", exclude={"provenance"})
+        if not semantic["final_review_gates"]:
+            semantic.pop("final_review_gates")  # Preserve pre-H09 graph hashes.
         for node in semantic["nodes"]:
             node["program"].pop("provenance", None)
         # H03 added optional typed defaults to references. An absent default

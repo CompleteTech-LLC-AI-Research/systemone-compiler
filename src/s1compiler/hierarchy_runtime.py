@@ -386,8 +386,11 @@ class HierarchyRuntime:
                 answer["value"] = candidate.label_map[answer["value"]]
             answer["distribution_scope"] = candidate.distribution_scope
             answer["origin"] = {"stage": candidate.stage, "decision": candidate.decision}
+            gate = self.artifact.final_review_gates.get(name, {}).get(candidate.stage)
             answer["review_required"] = bool(answer["review_required"] or
-                                             stages[candidate.stage].get("review_required", False))
+                                             stages[candidate.stage].get("review_required", False) or
+                                             (gate is not None and (gate.force_review or
+                                              answer["gate_score"] < gate.min_gate)))
             review = review or answer["review_required"]
             selected[name] = answer
         return selected, review
