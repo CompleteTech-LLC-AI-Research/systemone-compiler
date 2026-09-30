@@ -67,6 +67,70 @@ def test_live_registration_requires_independent_labels_and_billing_caps(tmp_path
     assert not (tmp_path / "live.json").exists()
 
 
+def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path):
+    # This metadata is a test double; the checked-in labels remain synthetic.
+    from s1compiler.io import fingerprint
+    first = json.loads(SPLITS["test"].read_text(encoding="utf-8").splitlines()[0])
+    message = first["state"]["message"]
+    prior_state = {"text": message}  # Old study has a different public input field.
+    assert fingerprint(prior_state) != fingerprint(first["state"])
+    attestation = {"label_origin": "independent_human_reviewed",
+                   "test_independence_evidence": "test-only-review-record",
+                   "reviewer": "test-only-reviewer",
+                   "prior_test_input_sha256s": [fingerprint(prior_state)],
+                   "prior_test_text_normalization": "casefold_whitespace_v1",
+                   "prior_test_text_sha256s": [fingerprint(" ".join(message.casefold().split()))]}
+    output = tmp_path / "unregistered.json"
+    with pytest.raises(DataError, match="test text overlaps"):
+        register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+                 SPLITS, output, study_id="test_only_cross_schema_overlap", mode="typesafe",
+                 selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=16,
+                 teacher_max_calls=3, teacher_model="test-only/model", data_attestation=attestation)
+    assert not output.exists()
+    with pytest.raises(ConfigurationError, match="normalized-text holdout exclusions"):
+        register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+                 SPLITS, output, study_id="test_only_missing_text_exclusions", mode="typesafe",
+                 selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=16,
+                 teacher_max_calls=3, teacher_model="test-only/model",
+                 data_attestation={key: value for key, value in attestation.items()
+                                   if key != "prior_test_text_sha256s"})
+    assert not output.exists()
+
+
+def test_normalized_text_fingerprints_cover_nested_declared_values():
+    from s1compiler.io import fingerprint
+    found = study._normalized_text_fingerprints({
+        "messages": ["  REFUND\tRequest  ", {"body": "Nested  TEXT"}],
+        "count": 3, "blank": "  "})
+    assert found == {fingerprint("refund request"), fingerprint("nested text")}
+
+
+def test_live_registration_redacts_both_prior_exclusion_lists(tmp_path):
+    # Exercise registration only with synthetic test doubles; no provider is built.
+    from s1compiler.io import fingerprint
+    attestation = {"label_origin": "independent_human_reviewed",
+                   "test_independence_evidence": "test-only-review-record",
+                   "reviewer": "test-only-reviewer",
+                   "prior_test_input_sha256s": [fingerprint({"text": "test-only unrelated"})],
+                   "prior_test_text_normalization": "casefold_whitespace_v1",
+                   "prior_test_text_sha256s": [fingerprint("test-only unrelated")]}
+    output = tmp_path / "registered.json"
+    protocol = register(ROOT / "source.json", ROOT / "source.json",
+                        ROOT / "flat_baseline.s1.json", SPLITS, output,
+                        study_id="test_only_live_registration", mode="typesafe",
+                        selected_method="dspy_gepa", structural_rounds=1,
+                        max_metric_calls=16, teacher_max_calls=3,
+                        teacher_model="test-only/model", data_attestation=attestation,
+                        provider_call_price_cap_usd=1, teacher_call_price_cap_usd=1,
+                        external_billing_cap_usd=1_000_000)  # Test-only cap; zero calls.
+    stored = protocol["data_attestation"]
+    assert stored["prior_test_input_sha256s"] is None
+    assert stored["prior_test_text_sha256s"] is None
+    assert stored["prior_test_exclusion_count"] == 1
+    assert stored["prior_test_text_exclusion_count"] == 1
+    assert load_protocol(output) == protocol
+
+
 def test_mock_selection_calibration_freeze_never_runs_test(tmp_path):
     protocol_path = tmp_path / "protocol.json"
     protocol = register(ROOT / "source.json", ROOT / "source.json",

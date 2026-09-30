@@ -36,6 +36,7 @@ from .runtime import Runtime, apply_policy, normalize_answers
 FORMAT = "systemone-hierarchy-study-protocol/v1"
 SPLITS = ("train", "validation", "calibration", "test")
 ARMS = ("flat_authored", "hierarchy_authored", "hierarchy_selected")
+TEXT_NORMALIZATION = "casefold_whitespace_v1"
 
 
 def _file_sha256(path: Path) -> str:
@@ -44,6 +45,23 @@ def _file_sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _normalized_text_fingerprints(state: dict[str, Any]) -> set[str]:
+    """Hash all nonempty string values, including nested declared input values."""
+    found = set()
+    pending = [state]
+    while pending:
+        value = pending.pop()
+        if isinstance(value, dict):
+            pending.extend(value.values())
+        elif isinstance(value, list):
+            pending.extend(value)
+        elif isinstance(value, str):
+            normalized = " ".join(value.casefold().split())
+            if normalized:
+                found.add(fingerprint(normalized))
+    return found
 
 
 def _envelope_write(path: Path, content: dict[str, Any]) -> None:
@@ -180,21 +198,33 @@ def register(source_path: str | Path, candidate_path: str | Path, flat_path: str
     attestation = data_attestation or {}
     if mode == "typesafe":
         exclusions = attestation.get("prior_test_input_sha256s")
+        text_exclusions = attestation.get("prior_test_text_sha256s")
         if (attestation.get("label_origin") != "independent_human_reviewed" or
             not attestation.get("test_independence_evidence") or
             not attestation.get("reviewer") or
             not isinstance(exclusions, list) or not exclusions or
             any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
                 for value in exclusions) or
+            not isinstance(text_exclusions, list) or not text_exclusions or
+            any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+                for value in text_exclusions) or
+            attestation.get("prior_test_text_normalization") != TEXT_NORMALIZATION or
             selected_method != "dspy_gepa" or not teacher_model):
             raise ConfigurationError("Live registration needs reviewed independent labels, teacher, "
-                                     "and explicit test-independence evidence.")
-        test_inputs = {fingerprint(project_state(source.source.state, row.state)) for row in splits["test"]}
+                                     "and exact-state plus normalized-text holdout exclusions.")
+        projected = [project_state(source.source.state, row.state) for row in splits["test"]]
+        test_inputs = {fingerprint(state) for state in projected}
         if test_inputs & set(exclusions):
             raise DataError("Live hierarchy test input overlaps an excluded prior-study holdout.")
+        text_exclusion_set = set(text_exclusions)
+        if any(_normalized_text_fingerprints(state) & text_exclusion_set for state in projected):
+            raise DataError("Live hierarchy test text overlaps an excluded prior-study holdout.")
         attestation = {**attestation, "prior_test_input_sha256s": None,
+                       "prior_test_text_sha256s": None,
                        "prior_test_exclusion_digest": fingerprint(sorted(set(exclusions))),
-                       "prior_test_exclusion_count": len(set(exclusions))}
+                       "prior_test_exclusion_count": len(set(exclusions)),
+                       "prior_test_text_exclusion_digest": fingerprint(sorted(text_exclusion_set)),
+                       "prior_test_text_exclusion_count": len(text_exclusion_set)}
         prices = (provider_call_price_cap_usd, teacher_call_price_cap_usd, external_billing_cap_usd)
         if any(type(value) not in (int, float) or not math.isfinite(value) or value <= 0 for value in prices):
             raise ConfigurationError("Live registration needs positive per-call price caps and an "
