@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from s1compiler.errors import DataError
-from s1compiler.hierarchy import HierarchySource
+from s1compiler.backends import ManagedBackend, MockBackend
+from s1compiler.hierarchy import HierarchySource, lower_hierarchy
+from s1compiler.hierarchy_runtime import HierarchyRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,3 +45,14 @@ def test_malformed_or_executable_looking_json_never_becomes_a_graph(tmp_path, pa
     path.write_text(payload, encoding="utf-8")
     with pytest.raises((DataError, ValueError)):
         HierarchySource.load(path)
+
+
+def test_executable_looking_user_text_is_only_leaf_data(tmp_path):
+    marker = tmp_path / "must-not-exist"
+    attack = f"__import__('pathlib').Path({str(marker)!r}).write_text('owned')"
+    source = HierarchySource.load(ROOT / "examples" / "hierarchy_contract" / "conditional.json")
+    backend = ManagedBackend(MockBackend())
+    result = HierarchyRuntime(lower_hierarchy(source), backend).run({"message": attack})
+    assert result["status"] in {"completed", "review_required"}
+    assert backend.budget.used >= 1
+    assert not marker.exists()
