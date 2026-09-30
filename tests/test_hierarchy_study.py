@@ -67,6 +67,16 @@ def test_live_registration_requires_independent_labels_and_billing_caps(tmp_path
     assert not (tmp_path / "live.json").exists()
 
 
+def test_registration_rejects_undersized_gepa_budget_before_protocol(tmp_path):
+    output = tmp_path / "undersized.json"
+    with pytest.raises(ConfigurationError, match="initial validation"):
+        register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+                 SPLITS, output, study_id="undersized_gepa_h14", mode="typesafe",
+                 selected_method="dspy_gepa", structural_rounds=1, max_metric_calls=1,
+                 teacher_max_calls=3, teacher_model="test-only/model")
+    assert not output.exists()
+
+
 @pytest.mark.parametrize("split", SPLITS)
 def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path, split):
     # This metadata is a test double; the checked-in labels remain synthetic.
