@@ -16,6 +16,7 @@ import random
 import re
 import sys
 from typing import Any
+from urllib.parse import urlsplit
 
 from .backends import ManagedBackend, MockBackend, Response, TypeSafeBackend
 from .data import dataset_hash
@@ -330,6 +331,24 @@ def load_protocol(path: str | Path) -> dict[str, Any]:
     return protocol
 
 
+def _teacher_endpoint() -> str:
+    """Endpoint from the environment, refusing URLs that could carry a credential."""
+    raw = os.environ.get("S1_TEACHER_API_BASE")
+    if not raw:
+        return "provider_default"
+    try:
+        parts = urlsplit(raw)
+        port = parts.port
+    except ValueError as exc:
+        raise ConfigurationError("S1_TEACHER_API_BASE is not a valid URL.") from exc
+    if (parts.scheme not in {"http", "https"} or not parts.hostname or parts.username is not None or
+        parts.password is not None or parts.query or parts.fragment):
+        raise ConfigurationError("S1_TEACHER_API_BASE must be an http(s) URL without userinfo, query, or "
+                                 "fragment; put credentials only in S1_TEACHER_API_KEY.")
+    host = f"[{parts.hostname}]" if ":" in parts.hostname else parts.hostname
+    return f"{parts.scheme}://{host}{':' + str(port) if port else ''}{parts.path}"
+
+
 def _unspecified_parameters(value: Any, prefix: str = "") -> list[str]:
     if value is None:
         return [prefix or "<root>"]
@@ -381,7 +400,7 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
                     "max_tokens": optimization["teacher_max_tokens"],
                     # The endpoint decides provider and price, so it is pinned here and
                     # re-resolved at selection; the credential itself is never recorded.
-                    "api_base": os.environ.get("S1_TEACHER_API_BASE") or "provider_default",
+                    "api_base": _teacher_endpoint(),
                     "temperature": "provider_default",
                     "request_timeout_s": teacher_defaults["timeout"].default,
                     "max_prompt_chars": teacher_defaults["max_prompt_chars"].default,
@@ -404,7 +423,7 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
                       "--share-feedback --approved-protocol-sha256 " + fingerprint(protocol) +
                       " --reviewed-manifest <reviewed manifest>",
             "test": "s1-study test --frozen <selection directory> --out <fresh directory> --allow-paid "
-                    "--semantic-review-approved --reviewed-frozen-sha256 <frozen.json sha256 after review>"},
+                    "--semantic-review-approved --reviewed-frozen-sha256 <frozen_sha256 printed by select, after review>"},
         "review_requirements": list(LIVE_REVIEW_ATTESTATIONS),
         "review_template": {"format": LIVE_MANIFEST_REVIEW_FORMAT,
                             "manifest_sha256": "<sha256 printed by s1-study manifest>",
@@ -967,7 +986,7 @@ def report_study(frozen_dir: str | Path, execution_dir: str | Path) -> dict[str,
         record = _read_record(_record_path(execution_dir, item), _record_identity(item, row, frozen))
         program = programs[arm]
         if record["synthetic"] != frozen["synthetic"] or (
-            record["backend"] != ("mock-lexical/v1" if frozen["synthetic"] else "typesafe-sdk/0.7.0")
+            record["backend"] != ("mock-lexical/v1" if frozen["synthetic"] else TypeSafeBackend.identity)
         ):
             raise DataError("Held-out backend mode or identity differs.")
         result = record["result"]
