@@ -56,6 +56,10 @@ actual ledgers; it never infers billed dollars from unknown usage.
 
 ## Live proposal and review gates
 
+For a pinned public corpus with upstream human judgments and a reproducible
+four-split preparation, see [human-annotated study preparation](HIERARCHY_LIVE_PREPARATION.md).
+Its pending review record cannot authorize live registration or teacher sharing.
+
 A live registration needs a new, independently human-reviewed four-split
 dataset, an attested test origin, a reviewer, and two SHA256 exclusion lists in
 `--data-attestation`: `prior_test_input_sha256s` for whole projected states and

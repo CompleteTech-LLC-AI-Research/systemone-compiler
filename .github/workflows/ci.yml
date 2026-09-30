@@ -30,6 +30,7 @@ jobs:
           unset TYPESAFE_API_KEY OPENAI_API_KEY S1_TEACHER_API_KEY
           "$temp_dir/venv/bin/s1" demo --out flat-demo
           "$temp_dir/venv/bin/s1" demo --starter hierarchy --out graph-demo
+          "$temp_dir/venv/bin/python" -m s1compiler.hierarchy_research_data --help
           "$temp_dir/venv/bin/python" -c "import sys, s1compiler; assert not {'dspy', 'gepa', 'typesafe_sdk'} & set(sys.modules)"
   optional-contracts:
     runs-on: ubuntu-latest
