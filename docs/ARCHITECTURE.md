@@ -49,6 +49,16 @@ and pinned model are not negotiable search parameters.
 | `metrics.py`, `policy.py` | Scoring, diagnostics, empirical gate/threshold fitting. |
 | `reporting.py`, `hardening.py` | Reports and review-required robustness proposals. |
 | `cli.py` | Beginner-facing workflow, doctor, demo, schema/playground export. |
+| `hierarchy.py`, `hierarchy_validation.py`, `hierarchy_data.py` | Versioned graph models, lowering, typed references, and split lineage. |
+| `hierarchy_compiler.py`, `hierarchy_architect.py`, `hierarchy_gepa.py` | Bounded graph selection, wording optimization, calibration, and freeze. |
+| `hierarchy_runtime.py`, `hierarchy_evidence.py`, `hierarchy_metrics.py` | Serial graph execution, durable attempt replay, and root/path reporting. |
+| `hierarchy_study.py` | Separate preregistered flat-versus-graph research runner. |
+
+The hierarchy path is a sequence of native typed leaf requests, not one native
+request with a global posterior. The frozen graph owns routing and final output
+mapping; each leaf uses the pinned model and the caller's shared request budget.
+The flat v1 artifact and its runtime keep their original one-request behavior.
+See [the contract](HIERARCHY_CONTRACT.md) and [migration guide](HIERARCHY_MIGRATION.md).
 
 ## DSPy and GEPA integration
 

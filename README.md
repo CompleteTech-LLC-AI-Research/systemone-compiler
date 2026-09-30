@@ -163,6 +163,8 @@ support, advisory PR risk, and nested reuse with disjoint synthetic datasets
 and checked-in expected traces.
 The [preregistered hierarchy study](docs/HIERARCHY_STUDY.md) provides a separate
 flat-versus-hierarchy runner with frozen selection and strict offline replay.
+The [flat-to-hierarchy migration guide](docs/HIERARCHY_MIGRATION.md) explains
+format dispatch, shared call budgets, result statuses, and compatibility.
 
 | Command | Purpose |
 |---|---|
@@ -177,6 +179,7 @@ flat-versus-hierarchy runner with frozen selection and strict offline replay.
 | `s1 schema --out schemas` | Export JSON schemas for tooling. |
 | `s1 doctor --check-optional` | Check installed dependency interfaces without inference. |
 | `s1 demo --out runs/demo` | Exercise the whole pipeline with a no-key synthetic fixture. |
+| `s1-study register/select/test/report` | Preregister and replay a separate three-arm hierarchy comparison. |
 
 For an authored graph, run `s1 init my-graph --starter hierarchy` or
 `s1 demo --starter hierarchy --out runs/graph-demo`. Both keep the flat starter
@@ -313,9 +316,12 @@ DSPy synthesis and mutation; standalone GEPA adapter; bounded add/drop/revise an
 numeric decomposition proposals; validation selection; separate empirical policy
 fitting; projected inputs; request budgets; optional sensitive-output cache;
 reports; schema export; hardening proposals; no-key fixture; tests and CI config.
+Hierarchy v1 adds a separate versioned source/frozen graph, typed routing and
+dataflow, nested reuse, shared-budget serial leaf execution, strict evidence
+replay, graph reporting, synthetic examples, and a preregistered study runner.
 
-Not claimed: measured accuracy gains; live provider verification in this build;
-production certification; general multi-stage agent orchestration; arbitrary
+Not claimed: measured hierarchy accuracy gains; a completed independent live
+hierarchy study; production certification; general multi-stage agent orchestration; arbitrary
 code generation; MIPRO integration; learned posterior calibration; a supervised
 weight fitter; automatic release approval; TypeScript runtime; pretrained weights;
 or a service deployed for you. The framework returns decisions; it does not move
