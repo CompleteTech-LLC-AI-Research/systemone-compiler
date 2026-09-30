@@ -4,7 +4,7 @@ import sys
 import types
 import pytest
 from s1compiler.architect import DSPyTeacher
-from s1compiler.errors import CandidateError, ConfigurationError
+from s1compiler.errors import CandidateError, ConfigurationError, DataError
 from s1compiler.gepa_adapter import JevGEPAAdapter, components_from_program, program_from_components, optimize_gepa
 
 
@@ -51,7 +51,8 @@ def test_component_key_contract(program):
 
 
 def test_gepa_adapter_shapes_and_feedback(program, backend, splits):
-    adapter = JevGEPAAdapter(program, backend, FixedTeacher(), batch_factory=Batch)
+    adapter = JevGEPAAdapter(program, backend, FixedTeacher(), batch_factory=Batch,
+                             train_rows=splits["train"])
     candidate = components_from_program(program)
     evaluated = adapter.evaluate(splits["train"][:2], candidate, capture_traces=True)
     assert len(evaluated.outputs) == len(evaluated.scores) == len(evaluated.trajectories) == 2
@@ -69,21 +70,51 @@ def test_gepa_no_traces_when_not_requested(program, backend, splits):
     assert result.trajectories is None
 
 
+@pytest.mark.parametrize("split", ["validation", "calibration", "test"])
+def test_gepa_reflection_rejects_every_nontrain_split_before_teacher_or_backend(program, backend, splits, split):
+    class SpyTeacher:
+        calls = 0
+
+        def propose_components(self, *_):
+            self.calls += 1
+            return {}
+
+    teacher = SpyTeacher()
+    adapter = JevGEPAAdapter(program, backend, teacher, batch_factory=Batch,
+                             train_rows=splits["train"])
+    candidate = components_from_program(program)
+    before = backend.budget.used
+    with pytest.raises(DataError, match="registered train"):
+        adapter.evaluate(splits[split][:1], candidate, capture_traces=True)
+    assert backend.budget.used == before
+    fake = Batch(outputs=[], scores=[], trajectories=[{"input": f"{split}-sentinel"}])
+    with pytest.raises(DataError, match="not captured"):
+        adapter.make_reflective_dataset(candidate, fake, ["urgent/instructions"])
+    with pytest.raises(DataError, match="not built"):
+        adapter.propose_new_texts(candidate, {"urgent/instructions": [{"Inputs": f"{split}-sentinel"}]},
+                                  ["urgent/instructions"])
+    assert teacher.calls == 0
+
+
 def test_invalid_gepa_candidate_no_backend_call(program, backend, splits):
-    adapter = JevGEPAAdapter(program, backend, FixedTeacher(), batch_factory=Batch)
+    adapter = JevGEPAAdapter(program, backend, FixedTeacher(), batch_factory=Batch,
+                             train_rows=splits["train"])
     result = adapter.evaluate(splits["train"][:2], {"bad": "bad"}, capture_traces=True)
     assert result.scores == [0, 0]
     assert len(result.trajectories) == 2
     assert backend.budget.used == 0
 
 
-def test_mutation_rollback(program, backend):
+def test_mutation_rollback(program, backend, splits):
     class BadTeacher:
         def propose_components(self, *args):
             return {"urgent/instructions": "5"}
-    adapter = JevGEPAAdapter(program, backend, BadTeacher())
+    adapter = JevGEPAAdapter(program, backend, BadTeacher(), batch_factory=Batch,
+                             train_rows=splits["train"])
     candidate = components_from_program(program)
-    result = adapter.propose_new_texts(candidate, {}, ["urgent/instructions"])
+    batch = adapter.evaluate(splits["train"][:1], candidate, capture_traces=True)
+    reflection = adapter.make_reflective_dataset(candidate, batch, ["urgent/instructions"])
+    result = adapter.propose_new_texts(candidate, reflection, ["urgent/instructions"])
     assert result["urgent/instructions"] == candidate["urgent/instructions"]
     assert adapter.rejected == 1
 

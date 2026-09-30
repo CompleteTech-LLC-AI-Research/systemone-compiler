@@ -8,7 +8,8 @@ from typing import Any
 from .data import Example, assert_disjoint
 from .errors import DataError
 from .hierarchy import (Candidate, Condition, Graph, HierarchyArtifact, HierarchySource, LeafStage,
-                        Reference, RootRef, StageRef)
+                        Reference, RootRef, StageRef, lower_hierarchy)
+from .hierarchy_data import HierarchySplitGuard
 from .models import Decision, StateField, project_state
 
 
@@ -17,6 +18,7 @@ class ValidationPlan:
     """Stable stage order for each authoring graph, keyed by definition name."""
 
     order: dict[str, tuple[str, ...]]
+    split_guard: HierarchySplitGuard | None = None
 
 
 def _fail(scope: str, stage: str, message: str) -> None:
@@ -374,7 +376,7 @@ def validate_hierarchy_compile_inputs(source: HierarchySource,
         raise DataError("Hierarchy compile requires train, validation, calibration, and test splits.")
     plan = validate_hierarchy_source(source)
     assert_disjoint(splits, source.source)
-    return plan
+    return ValidationPlan(order=plan.order, split_guard=HierarchySplitGuard(lower_hierarchy(source), splits))
 
 
 def validate_hierarchy_artifact(artifact: HierarchyArtifact) -> tuple[str, ...]:

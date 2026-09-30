@@ -14,6 +14,7 @@ from .hierarchy import (Candidate, Condition, HierarchyArtifact, LoweredExport,
                         LoweredNode, Reference, RootRef)
 from .hierarchy_validation import validate_hierarchy_artifact
 from .hierarchy_evidence import HierarchyEvidence
+from .hierarchy_data import BoundHierarchyExample
 from .io import fingerprint
 from .models import project_state
 from .runtime import Runtime
@@ -116,7 +117,10 @@ class HierarchyRuntime:
     def run(self, state: dict[str, Any], *, cancel_requested: Callable[[], bool] | None = None,
             timeout_seconds: float | None = None, ledger: AttemptLedger | None = None,
             evidence_dir: str | Path | None = None, evidence_mode: str = "create",
+            lineage: BoundHierarchyExample | None = None,
             _evidence: HierarchyEvidence | None = None) -> dict[str, Any]:
+        if lineage is not None:
+            lineage.assert_run(self.artifact, state)
         if evidence_dir is None and _evidence is None and evidence_mode != "create":
             raise ConfigurationError("Evidence replay or resume requires an evidence directory.")
         if evidence_dir is not None:
@@ -127,7 +131,10 @@ class HierarchyRuntime:
                                    input_sha256=fingerprint(projected),
                                    max_graph_attempts=self.max_graph_attempts,
                                    node_limits=self.node_attempt_limits,
-                                   policy=asdict(self.retry_policy), mode=evidence_mode) as evidence:
+                                   policy=asdict(self.retry_policy), mode=evidence_mode,
+                                   lineage_identity=({"root_id": lineage.row.id,
+                                                      "group": lineage.row.group,
+                                                      "split": lineage.split} if lineage else None)) as evidence:
                 if evidence_mode == "replay" and evidence.final is None:
                     raise DataError("Offline replay requires a complete final result.")
                 prior_used = self.backend.budget.used
@@ -137,14 +144,14 @@ class HierarchyRuntime:
                 try:
                     result = self.run(state, cancel_requested=cancel_requested,
                                       timeout_seconds=timeout_seconds, ledger=evidence.ledger,
-                                      _evidence=evidence)
+                                      lineage=lineage, _evidence=evidence)
                 finally:
                     if evidence_mode == "replay":
                         self.backend.budget.used = prior_used
                 if evidence.final is not None:
                     stored = evidence.final["result"]
                     fields = ("format", "graph_sha256", "model", "synthetic", "status",
-                              "decisions", "stages", "executed", "path")
+                              "decisions", "stages", "executed", "path", "lineage")
                     if any(result.get(field) != stored.get(field) for field in fields) or (
                         set(evidence.stages) != set(result["executed"])
                     ):
@@ -194,7 +201,7 @@ class HierarchyRuntime:
         try:
             decisions, review = self._run_scope("", self.artifact.final, root_state,
                                                 values, stages, executed, path, cancel_requested,
-                                                deadline, ledger, _evidence)
+                                                deadline, ledger, _evidence, lineage)
             status = "review_required" if review or set(decisions) != set(self.artifact.source.decisions) else "completed"
             if self._cancelled(cancel_requested, deadline):
                 status = "cancelled"
@@ -235,6 +242,8 @@ class HierarchyRuntime:
         }
         if failure is not None:
             result["error"] = {"type": type(failure).__name__, "message": str(failure)}
+        if lineage is not None:
+            lineage.seal(result)
         return result
 
     @staticmethod
@@ -386,6 +395,7 @@ class HierarchyRuntime:
                    values: dict[str, dict[str, dict[str, Any]]], stages: dict[str, dict[str, Any]],
                    executed: list[str], path: list[str], cancel_requested: Callable[[], bool] | None,
                    deadline: float | None, ledger: AttemptLedger, evidence: HierarchyEvidence | None,
+                   lineage: BoundHierarchyExample | None,
                    ) -> tuple[dict[str, dict[str, Any]], bool]:
         local = self._local_stages(prefix)
         for name in self._local_order(local):
@@ -444,13 +454,18 @@ class HierarchyRuntime:
                 projected = project_state(ports, mapped)
                 stages[name] = {"status": "running"}
                 if isinstance(stage, LoweredNode):
+                    if lineage is not None:
+                        lineage.validate_stage(stage, projected, values)
                     response = self._run_leaf(stage, projected, ledger, cancel_requested, deadline, evidence)
+                    if lineage is not None:
+                        lineage.record_prediction(name, response["decisions"])
                     values[name] = response["decisions"]
                     executed.append(name)
                     review = any(item["review_required"] for item in response["decisions"].values())
                 else:
                     outputs, review = self._run_scope(name + "/", stage.outputs, root, values, stages,
-                                                      executed, path, cancel_requested, deadline, ledger, evidence)
+                                                      executed, path, cancel_requested, deadline, ledger, evidence,
+                                                      lineage)
                     if set(outputs) != set(stage.output_contracts):
                         stages[name] = {"status": "review_blocked", "reason": "subgraph_incomplete"}
                         continue
