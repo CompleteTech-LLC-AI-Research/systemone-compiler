@@ -21,6 +21,16 @@ jobs:
       - run: python -m pytest -q --cov=s1compiler
       - run: python -m s1compiler demo --out runs/ci-demo
       - run: python -m build
+      - name: Verify installed wheel outside checkout without keys
+        run: |
+          temp_dir="$(mktemp -d)"
+          python -m venv "$temp_dir/venv"
+          "$temp_dir/venv/bin/python" -m pip install "$GITHUB_WORKSPACE"/dist/systemone_compiler-*.whl
+          cd "$temp_dir"
+          unset TYPESAFE_API_KEY OPENAI_API_KEY S1_TEACHER_API_KEY
+          "$temp_dir/venv/bin/s1" demo --out flat-demo
+          "$temp_dir/venv/bin/s1" demo --starter hierarchy --out graph-demo
+          "$temp_dir/venv/bin/python" -c "import sys, s1compiler; assert not {'dspy', 'gepa', 'typesafe_sdk'} & set(sys.modules)"
   optional-contracts:
     runs-on: ubuntu-latest
     steps:

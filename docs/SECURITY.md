@@ -50,6 +50,17 @@ injection or systematic misclassification.
 
 ## Budgets and failure modes
 
+Hierarchy executes one native request per selected leaf, so one root can consume
+multiple attempts. The same caller-owned `ManagedBackend` budget spans those
+leaves; graph and per-node limits can only tighten it. Optional durable evidence
+retains typed responses, derived stage inputs, attempt receipts, and routing
+decisions. Store its directory with the same protection as source examples and
+provider outputs. Resume reconciles reserved attempts; an uncertain flat study
+request is never retried automatically. Evidence checksums detect inconsistency,
+not authorship or confidentiality. The hierarchy study's estimated dollar cap
+uses caller-supplied per-call prices and must be independently checked against a
+provider-enforced billing limit before live approval.
+
 Live paths require explicit consent. Target-side budgets count SDK request
 attempts before dispatch, with SDK automatic retries disabled. Cache hits do not
 consume target calls. The teacher budget counts DSPy signature invocations;

@@ -74,6 +74,15 @@ has been established by the bundled synthetic fixture.
    hardening proposals. Do not convert synthetic/hardening labels into purported
    ground truth. Review the support-triage dataset card.
 
+7. Verify the separate hierarchy path without provider calls: run
+   `python -m s1compiler demo --starter hierarchy --out runs/setup-graph-UNIQUE`,
+   inspect its frozen artifact and result statuses, and run `s1-study` through
+   register/select/test/report on the checked-in synthetic support fixture using
+   fresh output paths. Confirm the study report says synthetic and that the
+   installed wheel includes `s1-study` and hierarchy starter data. See
+   `docs/HIERARCHY_MIGRATION.md` and `docs/HIERARCHY_STUDY.md`; neither workflow
+   authorizes a live study.
+
 ## Credentials, privacy, and live calls
 
 Do not print, commit, inspect into reports, or ask me to paste API keys. Check only
