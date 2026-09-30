@@ -272,7 +272,7 @@ def select_arm(arm, base, splits, backend, teacher, *, seed, search_calls, propo
         raise ConfigurationError("Search budget must cover one full search round and final validation.")
     if arm == "C":
         import gepa
-        adapter = JevGEPAAdapter(base, backend, bounded)
+        adapter = JevGEPAAdapter(base, backend, bounded, train_rows=splits["train"])
         minibatch = min(3, len(splits["train"]))
         # Stop BEFORE starting a round that could exceed the authorized budget.
         # A round can evaluate parent+child minibatches and the full validation set.

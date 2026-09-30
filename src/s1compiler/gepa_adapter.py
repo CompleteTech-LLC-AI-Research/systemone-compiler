@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from .errors import CandidateError, ConfigurationError
-from .io import canonical, json_loads
+from .errors import CandidateError, ConfigurationError, DataError
+from .io import canonical, fingerprint, json_loads
 from .metrics import example_quality, feedback
 from .models import Program
 from .runtime import Runtime
@@ -54,12 +54,21 @@ class JevGEPAAdapter:
     Validation examples are scored, but only train traces reach the proposer
     through GEPA's reflective minibatches.
     """
-    def __init__(self, program: Program, backend, teacher, *, batch_factory=None):
+    def __init__(self, program: Program, backend, teacher, *, batch_factory=None, train_rows=None):
         self.program, self.backend, self.teacher = program, backend, teacher
         self.batch_factory = batch_factory
         self.rejected = 0
+        self.train_rows = ({row.id: fingerprint(row.model_dump(mode="json")) for row in train_rows}
+                           if train_rows is not None else None)
+        self._issued_traces: set[tuple[str, str]] = set()
+        self._issued_reflections: set[str] = set()
 
     def evaluate(self, batch, candidate, capture_traces=False):
+        if capture_traces:
+            if self.train_rows is None or any(
+                self.train_rows.get(row.id) != fingerprint(row.model_dump(mode="json")) for row in batch
+            ):
+                raise DataError("GEPA reflection requires registered train examples only.")
         if self.batch_factory is None:
             try:
                 from gepa.core.adapter import EvaluationBatch
@@ -73,10 +82,13 @@ class JevGEPAAdapter:
             program = program_from_components(self.program, candidate)
         except CandidateError:
             # Syntax/schema failure is candidate quality, not an infrastructure outage.
+            trajectories = ([{"error": "Candidate schema invalid; preserve component names and JSON entry types."}
+                             for _ in batch] if capture_traces else None)
+            if capture_traces:
+                self._issued_traces.add((fingerprint(candidate), fingerprint(trajectories)))
             return factory(outputs=[{"error": "invalid_candidate"} for _ in batch],
                 scores=[0.0] * len(batch),
-                trajectories=[{"error": "Candidate schema invalid; preserve component names and JSON entry types."}
-                              for _ in batch] if capture_traces else None)
+                trajectories=trajectories)
         runtime = Runtime(program, self.backend)
         for example in batch:
             result = runtime.run(example.state)
@@ -86,17 +98,25 @@ class JevGEPAAdapter:
             scores.append(example_quality(program, example, result))
             if capture_traces:
                 traces.append(feedback(program, example, result, include_state=True))
+        if capture_traces:
+            self._issued_traces.add((fingerprint(candidate), fingerprint(traces)))
         return factory(outputs=outputs, scores=scores, trajectories=traces if capture_traces else None)
 
     def make_reflective_dataset(self, candidate, eval_batch, components_to_update):
         if eval_batch.trajectories is None:
             raise CandidateError("Reflection requested without captured training traces.")
-        return {key: [{"Inputs": trace.get("input", {}),
+        if (fingerprint(candidate), fingerprint(eval_batch.trajectories)) not in self._issued_traces:
+            raise DataError("GEPA reflection traces were not captured from registered train examples.")
+        result = {key: [{"Inputs": trace.get("input", {}),
                        "Generated Outputs": trace.get("predictions", {}),
                        "Feedback": {k: v for k, v in trace.items() if k not in {"input", "predictions"}}}
                       for trace in eval_batch.trajectories] for key in components_to_update}
+        self._issued_reflections.add(fingerprint(result))
+        return result
 
     def propose_new_texts(self, candidate, reflective_dataset, components_to_update):
+        if fingerprint(reflective_dataset) not in self._issued_reflections:
+            raise DataError("Teacher reflection was not built from registered train traces.")
         try:
             proposed = self.teacher.propose_components(candidate, reflective_dataset, components_to_update)
             if set(proposed) != set(components_to_update):
@@ -117,7 +137,7 @@ def optimize_gepa(program: Program, train, validation, backend, teacher, *,
         raise ConfigurationError("Install the optimize extra: pip install -e '.[optimize]'.") from exc
     if max_metric_calls < len(validation) + 2:
         raise ConfigurationError("GEPA metric budget must exceed the initial validation-set evaluation.")
-    adapter = JevGEPAAdapter(program, backend, teacher)
+    adapter = JevGEPAAdapter(program, backend, teacher, train_rows=train)
     # No checkpoint loading/pickle, no third-party experiment tracking, no raw
     # trace files. DSPy supplies propose_new_texts, so reflection_lm is not needed.
     result = gepa.optimize(

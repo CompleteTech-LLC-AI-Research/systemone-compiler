@@ -100,12 +100,14 @@ class HierarchyEvidence:
 
     def __init__(self, directory: str | Path, *, artifact, backend: ManagedBackend,
                  input_sha256: str, max_graph_attempts: int, node_limits: dict[str, int],
-                 policy: dict[str, Any], mode: str):
+                 policy: dict[str, Any], mode: str,
+                 lineage_identity: dict[str, Any] | None = None):
         if mode not in {"create", "resume", "replay"}:
             raise ConfigurationError("Unknown hierarchy evidence mode.")
         self.directory, self.mode = Path(directory), mode
         self.artifact, self.backend = artifact, backend
         self.input_sha256 = input_sha256
+        self.lineage_identity = copy.deepcopy(lineage_identity)
         self.max_graph_attempts, self.node_limits, self.policy = max_graph_attempts, node_limits, policy
         self.lock_file = None
         self.ledger: AttemptLedger | None = None
@@ -142,6 +144,7 @@ class HierarchyEvidence:
     def _identity(self, owner_start_used: int, run_id: str) -> dict[str, Any]:
         return {"format": FORMAT, "run_id": run_id, "graph_sha256": self.artifact.content_hash,
                 "input_sha256": self.input_sha256, "model": self.artifact.source.model,
+                "lineage_identity": self.lineage_identity,
                 "backend": self.backend.identity, "synthetic": self.backend.synthetic,
                 "package_version": package_version(), "implementation_sha256": implementation_hash(),
                 "max_graph_attempts": self.max_graph_attempts, "node_limits": self.node_limits,
