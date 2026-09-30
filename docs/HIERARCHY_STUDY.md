@@ -104,7 +104,10 @@ unspecified parameter. It then creates
 frozen graph digests and `live-manifest.json`, which records the reviewed
 manifest digest and marks the held-out test and semantic review as unapproved.
 Live held-out test requires another explicit paid approval,
-`--semantic-review-approved`, and the exact `--reviewed-frozen-sha256`. No live
+`--semantic-review-approved`, and the exact `--reviewed-frozen-sha256`, which is
+the `frozen_sha256` that `select` prints and `live-manifest.json` records, not
+the file hash of `frozen.json`. The teacher endpoint must be a plain http(s) URL;
+the manifest refuses one carrying userinfo, a query, or a fragment. No live
 study or teacher upload is authorized by this document. The checked-in synthetic
 fixture is unsuitable for a live gain claim; no independent human-labeled
 dataset, completed review, or measured result is bundled.

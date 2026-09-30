@@ -564,3 +564,28 @@ def test_study_cli_manifest_and_review_run_without_keys(tmp_path, monkeypatch, c
                  "--allow-paid", "--share-feedback", "--approved-protocol-sha256", "0" * 64,
                  "--reviewed-manifest", str(tmp_path / "reviewed.json")]) == 2
     assert not (tmp_path / "frozen").exists()
+
+
+@pytest.mark.parametrize("value", ["https://user:secret@test-only.invalid/v1", "https://test-only.invalid/v1?key=secret",
+                                   "https://test-only.invalid/v1#secret", "ftp://test-only.invalid/v1",
+                                   "https:///v1", "https://test-only.invalid:notaport/v1"])
+def test_teacher_endpoint_refuses_urls_that_could_carry_credentials(monkeypatch, value):
+    monkeypatch.setenv("S1_TEACHER_API_BASE", value)
+    with pytest.raises(ConfigurationError, match="S1_TEACHER_API_BASE"):
+        study._teacher_endpoint()
+
+
+def test_teacher_endpoint_records_plain_urls_and_defaults(monkeypatch):
+    monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
+    assert study._teacher_endpoint() == "provider_default"
+    monkeypatch.setenv("S1_TEACHER_API_BASE", "https://test-only.invalid:8443/v1")
+    assert study._teacher_endpoint() == "https://test-only.invalid:8443/v1"
+
+
+def test_manifest_proposal_never_records_a_credentialed_endpoint(tmp_path, monkeypatch):
+    protocol_path, _ = _live_test_double_protocol(tmp_path)
+    monkeypatch.setenv("S1_TEACHER_API_BASE", "https://user:test-only-secret@test-only.invalid/v1")
+    output = tmp_path / "credentialed-manifest.json"
+    with pytest.raises(ConfigurationError, match="userinfo"):
+        study.propose_live_manifest(protocol_path, output)
+    assert not output.exists()
