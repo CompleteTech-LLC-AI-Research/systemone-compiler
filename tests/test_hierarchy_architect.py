@@ -204,3 +204,95 @@ def test_semantic_review_ignores_bookkeeping_only_changes():
     review = semantic_review_manifest(original, changed)
     assert not (review["changed_composition"] or review["changed_child_prompts"]
                 or review["changed_routing_goals_or_conditions"])
+
+
+CHAIN_FIXTURE = FIXTURE.with_name("chain.json")
+
+
+def _chain_plan():
+    source = HierarchySource.load(CHAIN_FIXTURE)
+    return source, copy.deepcopy(hierarchy_plan(source))
+
+
+@pytest.mark.parametrize("mutation", [
+    "leaf_model_drift", "score_scale_grows", "score_scale_shrinks", "output_type_changes",
+    "output_weight_changes", "score_tolerance_changes", "output_removed", "output_added",
+])
+def test_proposals_cannot_change_the_fixed_public_contract(mutation):
+    source, plan = _chain_plan()
+    graph = plan["graph"]
+    outputs = graph["outputs"]
+    if mutation == "leaf_model_drift":
+        graph["stages"][0]["program"]["model"] = "jev-9.99.9"
+    elif mutation == "score_scale_grows":
+        criteria = outputs["priority"]["criteria"]
+        criteria.append("one more level")
+    elif mutation == "score_scale_shrinks":
+        outputs["priority"]["criteria"] = outputs["priority"]["criteria"][:-1]
+    elif mutation == "output_type_changes":
+        outputs["priority"] = {"type": "noul", "goal": outputs["priority"]["goal"],
+                               "criteria": {"true": "yes", "false": "no"}}
+    elif mutation == "output_weight_changes":
+        outputs["priority"]["weight"] = outputs["priority"]["weight"] + 1.0
+    elif mutation == "score_tolerance_changes":
+        outputs["priority"]["score_tolerance"] = outputs["priority"]["score_tolerance"] + 0.25
+    elif mutation == "output_removed":
+        outputs.pop("priority")
+        graph["final"].pop("priority")
+    else:
+        outputs["extra"] = copy.deepcopy(outputs["priority"])
+        graph["final"]["extra"] = copy.deepcopy(graph["final"]["priority"])
+    with pytest.raises(CandidateError):
+        plan_to_hierarchy(source, plan)
+
+
+def test_proposal_cannot_exceed_the_source_nesting_depth_limit():
+    source = HierarchySource.load(FIXTURE.with_name("nested.json"))
+    plan = copy.deepcopy(hierarchy_plan(source))
+    leaf = plan["definitions"]["check_note"]
+    deep = {}
+    levels = source.limits.max_depth + 1
+    for level in range(levels, 0, -1):
+        if level == levels:
+            deep[f"level_{level}"] = copy.deepcopy(leaf)
+            continue
+        deep[f"level_{level}"] = {
+            "inputs": copy.deepcopy(leaf["inputs"]), "outputs": copy.deepcopy(leaf["outputs"]),
+            "stages": [{"id": "inner", "kind": "subgraph", "definition": f"level_{level + 1}",
+                        "inputs": {"note": {"root": "note"}}}],
+            "final": {"review": {"candidates": [{"stage": "inner", "decision": "review",
+                                                  "distribution_scope": "full_contract"}],
+                                 "on_missing": "review_required"}}}
+    plan["definitions"] = deep
+    for stage in plan["graph"]["stages"]:
+        stage["definition"] = "level_1"
+    with pytest.raises(CandidateError):
+        plan_to_hierarchy(source, plan)
+
+
+def test_proposal_cannot_carry_limits_or_a_replacement_source():
+    source, plan = _chain_plan()
+    for extra in ("limits", "source", "format"):
+        with pytest.raises(CandidateError, match="only definitions and graph"):
+            plan_to_hierarchy(source, {**plan, extra: {}})
+    for malformed in (None, [], "plan", {"graph": plan["graph"]}):
+        with pytest.raises(CandidateError):
+            plan_to_hierarchy(source, malformed)
+
+
+def test_provider_failures_during_a_structure_proposal_propagate_instead_of_scoring_zero():
+    bad, _ = sources()
+
+    class Failing:
+        def propose_hierarchy(self, *_args, **_kwargs):
+            raise BackendError("Test-only provider unavailable")
+
+        def accounting(self):
+            return {"provider_requests_attempted": 1}
+
+    backend = ManagedBackend(MockBackend(), max_calls=40)
+    compiler = HierarchyCompiler(backend, teacher=Failing(), options=HierarchyCompileOptions(
+        architect="dspy", structural_rounds=1, min_calibration_samples=1))
+    with pytest.raises(BackendError, match="provider unavailable"):
+        compiler.compile(bad, **splits())
+    backend.close()
