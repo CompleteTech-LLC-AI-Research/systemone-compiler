@@ -331,3 +331,77 @@ def test_implementation_hash_ignores_line_endings_but_not_code(tmp_path, monkeyp
     runtime.write_bytes(runtime.read_bytes() + b"# changed behaviour\n")
     monkeypatch.setattr(module, "__file__", str(edited))
     assert module.implementation_hash() != unix_hash
+
+
+@pytest.mark.parametrize("mode", ["resume", "replay"])
+def test_oversized_event_fails_without_repair_or_dispatch(tmp_path, mode):
+    from s1compiler.hierarchy_evidence import MAX_LINE_BYTES
+
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "oversized"
+    runtime().run(state, evidence_dir=directory)
+    path = directory / "events.jsonl"
+    before = path.read_bytes() + b"x" * (MAX_LINE_BYTES + 1)
+    path.write_bytes(before)
+    backend = Recording()
+    with pytest.raises(DataError, match="event is oversized"):
+        runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode=mode)
+    assert backend.calls == []
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("limits", [
+    {"max_graph_attempts": 2},
+    {"node_attempt_limits": {"signal": 1}},
+])
+def test_resume_rejects_changed_graph_or_node_limits_before_mutation(tmp_path, limits):
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "limits"
+    initial = runtime()
+    initial.run(state, evidence_dir=directory)
+    before = {name: (directory / name).read_bytes()
+              for name in ("manifest.json", "attempts.json", "events.jsonl")}
+    backend = Recording()
+    changed = HierarchyRuntime(initial.artifact, ManagedBackend(backend), **limits)
+    with pytest.raises(DataError, match="plan, data"):
+        changed.run(state, evidence_dir=directory, evidence_mode="resume")
+    assert backend.calls == []
+    assert {name: (directory / name).read_bytes() for name in before} == before
+
+
+@pytest.mark.parametrize("mode", ["resume", "replay"])
+def test_event_sequence_rejected_even_with_valid_recomputed_hash_chain(tmp_path, mode):
+    from s1compiler.io import canonical, fingerprint
+
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "sequence"
+    runtime().run(state, evidence_dir=directory)
+    path = directory / "events.jsonl"
+    events = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    events[0]["seq"], events[1]["seq"] = events[1]["seq"], events[0]["seq"]
+    previous = "0" * 64
+    for event in events:
+        event["prev_sha256"] = previous
+        event["sha256"] = fingerprint({key: event[key] for key in ("seq", "prev_sha256", "payload")})
+        previous = event["sha256"]
+    path.write_text("".join(canonical(event) + "\n" for event in events), encoding="utf-8")
+    before = path.read_bytes()
+    backend = Recording()
+    with pytest.raises(DataError, match="event chain"):
+        runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode=mode)
+    assert backend.calls == []
+    assert path.read_bytes() == before
+
+
+def test_replay_rejects_torn_tail_without_truncating_completed_evidence(tmp_path):
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "torn-replay"
+    runtime().run(state, evidence_dir=directory)
+    path = directory / "events.jsonl"
+    before = path.read_bytes() + b'{"seq":4'
+    path.write_bytes(before)
+    backend = Recording()
+    with pytest.raises(DataError, match="incomplete trailing event"):
+        runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode="replay")
+    assert backend.calls == []
+    assert path.read_bytes() == before
