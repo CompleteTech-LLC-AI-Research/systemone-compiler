@@ -359,6 +359,8 @@ class HierarchyCompiler:
                                "owner": self.backend.accounting(),
                                "teacher": self.teacher.accounting() if self.teacher else None},
                 "limitations": ["Synthetic execution is not Jev quality evidence.",
+                                "Flat baseline uses default policies without calibration; hierarchy final gates "
+                                "are fitted. Review coverage is not a matched-calibration comparison.",
                                 "Post-route gates do not tune routing; low-sample branches review.",
                                 "Held-out scores are descriptive, not deployment approval."]}
 

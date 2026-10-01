@@ -45,6 +45,9 @@ def test_no_key_compile_freezes_review_gates_and_roundtrips(tmp_path):
     assert report["calibration"]["fit"]["resolution"]["technical"]["status"] == "review_only"
     assert report["test"]["hierarchy"]["coverage"]["review_n"] == 1
     assert report["test"]["paired"]["n_clusters"] == 1
+    assert any("Flat baseline uses default policies without calibration" in limitation
+               and "not a matched-calibration comparison" in limitation
+               for limitation in report["limitations"])
     assert report["accounting"]["native_calls_this_compile"] <= 32
     assert report["accounting"]["native_calls_this_compile"] == backend.budget.used
     assert set(artifact.source.decisions) == set(source.source.decisions)

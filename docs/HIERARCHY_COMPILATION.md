@@ -51,7 +51,10 @@ recomputes full calibration paths under the frozen graph. The first test call
 occurs only afterward, and a session permits one held-out phase.
 
 The report uses the same root-level objective for paired flat and hierarchy
-comparison. Its synthetic status does not imply real Jev quality or deployment
+comparison. The flat template retains default policies without calibration,
+while hierarchy final gates are fitted on calibration rows. Review coverage is
+therefore not a matched-calibration comparison; the report records this limitation.
+Its synthetic status does not imply real Jev quality or deployment
 approval. A measured artifact still requires independent acceptance before use.
 
 `components_from_hierarchy` and `hierarchy_from_components` address text by
