@@ -125,7 +125,7 @@ or `-Full` for optional integrations); they never run paid inference.
 | --- | --- | --- |
 | *(base)* | Pydantic, PyYAML | Declarations, demo, frozen runtime with the mock backend |
 | `live` | TypeSafe SDK 0.7.0 | Real Jev calls |
-| `optimize` | DSPy 3.3.1, GEPA 0.1.4 (DSPy 3.4 not yet verified, [#90](https://github.com/Jev-Engineering/TypeWright/issues/90)) | Architect, structural search, wording optimization |
+| `optimize` | DSPy >=3.3.1,<3.5 (verified 3.3.1 and 3.4.0), GEPA 0.1.4 | Architect, structural search, wording optimization |
 | `research` | NumPy, Matplotlib | Benchmark statistics and figures |
 | `dev` | pytest, coverage, Ruff, build | Development |
 

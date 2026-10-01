@@ -1,4 +1,5 @@
 from __future__ import annotations
+import inspect
 import os
 from typing import Any
 
@@ -104,6 +105,12 @@ class DSPyTeacher:
             kwargs["api_base"] = os.environ["S1_TEACHER_API_BASE"]
         if os.getenv("S1_TEACHER_API_KEY"):
             kwargs["api_key"] = os.environ["S1_TEACHER_API_KEY"]
+        # DSPy 3.4 added native LM engines and engine="auto" prefers them. The native path returns
+        # responses without LiteLLM's `_hidden_params`, which would silently drop the SDK cost
+        # estimate this boundary reports. Pin the LiteLLM backend wherever DSPy offers the choice;
+        # DSPy 3.3.x has no `engine` argument and always uses LiteLLM.
+        if "engine" in inspect.signature(dspy.LM.__init__).parameters:
+            kwargs["engine"] = "litellm"
         self.lm = dspy.LM(model, **kwargs)
         forward = self.lm.forward
 

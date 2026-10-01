@@ -7,7 +7,7 @@ Documentation inspection date: **2026-09-19**. These are the implementation targ
 | Python | >=3.11 | Core library, CLI, tests. |
 | TypeSafe SDK | `typesafe-sdk==0.7.0` | Native `TypeSafeClient.system_one`. |
 | Target model | `jev-1.13.0` | Versioned ID, not a moving alias. |
-| DSPy | `dspy[litellm]==3.3.1` | `Signature`, `Predict`, explicit teacher `LM/context`. |
+| DSPy | `dspy[litellm]>=3.3.1,<3.5` (verified: 3.3.1 and 3.4.0) | `Signature`, `Predict`, explicit teacher `LM/context`. |
 | GEPA | `gepa==0.1.4` | Standalone adapter and custom component proposer. |
 
 These are not claims that all dependencies were installed or live-tested in the
@@ -15,6 +15,28 @@ packaging environment. See `BUILD_REPORT.md` for the actual boundary. PyPI resol
 may fail on a different Python/platform/provider combination. Verify against
 primary documentation and change pins with regression tests rather than silently
 installing an arbitrary newest version.
+
+## DSPy 3.3.1 and 3.4.x (issue #90)
+
+The supported range is `>=3.3.1,<3.5`, with `gepa==0.1.4` pinned (DSPy 3.4.0 resolves
+the same GEPA). Only 3.3.1 and 3.4.0 were exercised; later 3.4.x patch releases are
+accepted by the range but unverified. The upper bound is evidence-based: DSPy 3.4
+deprecates overriding `BaseLM.forward()` (which the teacher meter does) and schedules
+its removal in 3.5. See `BUILD_REPORT.md` for the executed results.
+
+- Engine: DSPy 3.4 `engine="auto"` prefers native lm15 execution. The native response
+  has no LiteLLM `_hidden_params`, so the teacher's SDK cost estimate would silently
+  become "unknown". `DSPyTeacher` therefore passes `engine="litellm"` whenever
+  `dspy.LM` accepts `engine` (3.3.x has no such argument and always uses LiteLLM).
+- Unchanged in 3.4.0 (checked offline against a loopback test double): caches off,
+  `disable_history=True` leaves no history, signature-call and LM-forward ceilings count,
+  `S1_TEACHER_API_BASE`/`S1_TEACHER_API_KEY` reach the request, consent flags are untouched.
+- Pydantic: `dspy` 3.4.0 itself requires `pydantic>=2.11.0`, so the `optimize` extra
+  resolves to it automatically. The base install stays `pydantic>=2.10,<3`.
+- Not covered: `dspy[typesafe]`, `TypeSafe`/`Noul`/`Choice`/`Score` decision types and
+  `ReAnchor` are not used or tested here.
+- The documentation inspection date above was not changed; this verification used the
+  installed packages, not a fresh read of the primary documentation.
 
 ## TypeSafe contract
 

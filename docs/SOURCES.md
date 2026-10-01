@@ -32,6 +32,9 @@ are recorded in `INTEGRATIONS.md`; a source link is not a live execution result.
   https://github.com/stanfordnlp/dspy
 - Stable integration-target metadata:
   https://pypi.org/project/dspy/3.3.1/
+- Second verified target (release notes, not re-read for the inspection date):
+  https://github.com/stanfordnlp/dspy/releases/tag/3.4.0
+  https://pypi.org/project/dspy/3.4.0/
 
 ## GEPA
 

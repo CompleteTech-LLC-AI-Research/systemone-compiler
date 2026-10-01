@@ -54,7 +54,7 @@ has been established by the bundled synthetic fixture.
 
 4. Verify current official documentation if a pinned dependency cannot resolve
    or its interface differs. Integration targets in this package are
-   `typesafe-sdk==0.7.0`, `dspy[litellm]==3.3.1`, and `gepa==0.1.4`. Check
+   `typesafe-sdk==0.7.0`, `dspy[litellm]>=3.3.1,<3.5` (verified 3.3.1 and 3.4.0), and `gepa==0.1.4`. Check
    `docs/SOURCES.md` rather than guessing APIs. Fix the smallest necessary adapter
    code, add a regression test, document any pin change, and rerun the checks.
    Preserve native TypeSafe `system_one(state, questions, model)` execution and
