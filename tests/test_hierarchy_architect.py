@@ -5,16 +5,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from s1compiler.architect import DSPyTeacher
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example
-from s1compiler.errors import BackendError, BudgetExceeded, CandidateError, ConfigurationError
-from s1compiler.hierarchy import HierarchySource
-from s1compiler.hierarchy_architect import (hierarchy_plan, plan_to_hierarchy,
+from typewright.architect import DSPyTeacher
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example
+from typewright.errors import BackendError, BudgetExceeded, CandidateError, ConfigurationError
+from typewright.hierarchy import HierarchySource
+from typewright.hierarchy_architect import (hierarchy_plan, plan_to_hierarchy,
                                              semantic_review_manifest, HIERARCHY_DESIGN_RULES,
                                              make_hierarchy_design_signature)
-from s1compiler.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
-from s1compiler.io import canonical
+from typewright.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
+from typewright.io import canonical
 
 
 FIXTURE = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract" / "conditional.json"

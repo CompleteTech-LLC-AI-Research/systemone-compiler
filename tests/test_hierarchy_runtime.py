@@ -8,10 +8,10 @@ import sys
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.errors import ConfigurationError
-from s1compiler.hierarchy import HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_runtime import HierarchyRuntime
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.errors import ConfigurationError
+from typewright.hierarchy import HierarchySource, lower_hierarchy
+from typewright.hierarchy_runtime import HierarchyRuntime
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
@@ -333,8 +333,8 @@ def guarded(name, *args, **kwargs):
         raise AssertionError('optional dependency imported: ' + name)
     return original(name, *args, **kwargs)
 builtins.__import__ = guarded
-from s1compiler import HierarchyRuntime, HierarchySource, lower_hierarchy
-from s1compiler.backends import ManagedBackend, MockBackend
+from typewright import HierarchyRuntime, HierarchySource, lower_hierarchy
+from typewright.backends import ManagedBackend, MockBackend
 source = HierarchySource.load(sys.argv[1])
 backend = ManagedBackend(MockBackend())
 result = HierarchyRuntime(lower_hierarchy(source), backend).run({'message': 'refund invoice charge'})

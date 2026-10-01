@@ -4,8 +4,8 @@ import threading
 
 import pytest
 
-from s1compiler.errors import BudgetExceeded
-from s1compiler.resilience import recover_batch
+from typewright.errors import BudgetExceeded
+from typewright.resilience import recover_batch
 
 
 def run(fn, rows, **kwargs):

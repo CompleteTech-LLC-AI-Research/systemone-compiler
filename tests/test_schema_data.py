@@ -2,11 +2,11 @@ import json
 import math
 import pytest
 from pydantic import ValidationError
-from s1compiler.data import assert_disjoint, read_jsonl, validate_example
-from s1compiler.errors import CandidateError, DataError
-from s1compiler.io import atomic_json, load_document
-from s1compiler.models import Decision, Program, UseCase, project_state
-from s1compiler.architect import plan_to_program, program_plan
+from typewright.data import assert_disjoint, read_jsonl, validate_example
+from typewright.errors import CandidateError, DataError
+from typewright.io import atomic_json, load_document
+from typewright.models import Decision, Program, UseCase, project_state
+from typewright.architect import plan_to_program, program_plan
 
 
 @pytest.mark.parametrize("kind,criteria", [

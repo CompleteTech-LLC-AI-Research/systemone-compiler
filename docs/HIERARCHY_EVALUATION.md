@@ -1,6 +1,6 @@
 # Hierarchy evaluation
 
-`s1compiler.hierarchy_metrics` evaluates frozen graphs against registered root
+`typewright.hierarchy_metrics` evaluates frozen graphs against registered root
 examples. Supply the same `HierarchySplitGuard` used for execution, and pass an
 explicit split. `evaluate_hierarchy` returns a report and the individual graph
 results. `replay_hierarchy_evaluation` rebuilds that report from complete durable

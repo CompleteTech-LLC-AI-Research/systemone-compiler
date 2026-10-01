@@ -5,13 +5,13 @@ import argparse
 import json
 from pathlib import Path
 
-from s1compiler.architect import template_program
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.hierarchy import HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_runtime import HierarchyRuntime
-from s1compiler.hierarchy_validation import validate_hierarchy_source
-from s1compiler.io import fingerprint
-from s1compiler.models import Program, UseCase
+from typewright.architect import template_program
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.hierarchy import HierarchySource, lower_hierarchy
+from typewright.hierarchy_runtime import HierarchyRuntime
+from typewright.hierarchy_validation import validate_hierarchy_source
+from typewright.io import fingerprint
+from typewright.models import Program, UseCase
 
 
 ROOT = Path(__file__).resolve().parent

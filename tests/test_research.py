@@ -2,14 +2,14 @@ import json
 
 import pytest
 
-from s1compiler import research, research_data as data, research_stats as stats
-from s1compiler.architect import template_program
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.banking77 import IdentityTeacher
-from s1compiler.data import Example, assert_disjoint, dataset_hash
-from s1compiler.errors import BackendError, ConfigurationError, DataError
-from s1compiler.io import atomic_json, fingerprint, load_document
-from s1compiler.runtime import Runtime
+from typewright import research, research_data as data, research_stats as stats
+from typewright.architect import template_program
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.banking77 import IdentityTeacher
+from typewright.data import Example, assert_disjoint, dataset_hash
+from typewright.errors import BackendError, ConfigurationError, DataError
+from typewright.io import atomic_json, fingerprint, load_document
+from typewright.runtime import Runtime
 
 
 @pytest.fixture
@@ -22,9 +22,9 @@ def source_for_test(task):
 
 
 def test_prior_holdout_export_is_test_only_and_preserves_registered_inputs(datasets, tmp_path, np):
-    from s1compiler.holdout_exclusions import export
-    from s1compiler.hierarchy_study import _normalized_text_fingerprints
-    from s1compiler.models import project_state
+    from typewright.holdout_exclusions import export
+    from typewright.hierarchy_study import _normalized_text_fingerprints
+    from typewright.models import project_state
 
     protocol_path = tmp_path / "protocol.json"
     research.register(datasets, protocol_path, backend="mock")
@@ -55,7 +55,7 @@ def test_prior_holdout_export_is_test_only_and_preserves_registered_inputs(datas
 
 @pytest.mark.parametrize("tamper", ["protocol", "split", "registered_manifest"])
 def test_prior_holdout_export_rejects_changed_evidence_before_output(datasets, tmp_path, tamper, np):
-    from s1compiler.holdout_exclusions import export
+    from typewright.holdout_exclusions import export
 
     protocol_path = tmp_path / "protocol.json"
     research.register(datasets, protocol_path, backend="mock")
@@ -292,7 +292,7 @@ def test_task_contracts_exclude_annotation_hints():
 
 
 def test_live_registration_rejects_synthetic_labels(datasets, tmp_path, np):
-    from s1compiler.errors import ConfigurationError
+    from typewright.errors import ConfigurationError
     with pytest.raises(ConfigurationError, match="upstream human labels"):
         research.register(datasets, tmp_path / "live.json", backend="typesafe")
 
@@ -432,7 +432,7 @@ def test_real_gepa_search_accepts_each_typed_task(task, datasets, np):
 
 def test_prior_holdout_export_cli_prints_only_the_message_for_a_chained_data_error(
         tmp_path, monkeypatch, capsys):
-    import s1compiler.holdout_exclusions as module
+    import typewright.holdout_exclusions as module
     secret = "test-only-secret-customer-text"
 
     def failing(*_args, **_kwargs):
@@ -455,7 +455,7 @@ def test_prior_holdout_export_cli_prints_only_the_message_for_a_chained_data_err
 
 def test_prior_holdout_export_removes_a_partial_output_so_the_run_can_be_retried(
         datasets, tmp_path, monkeypatch, np):
-    import s1compiler.holdout_exclusions as module
+    import typewright.holdout_exclusions as module
     protocol_path = tmp_path / "protocol.json"
     research.register(datasets, protocol_path, backend="mock")
     real = module.atomic_json

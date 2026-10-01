@@ -3,9 +3,9 @@ import json
 import sys
 import types
 import pytest
-from s1compiler.architect import DSPyTeacher
-from s1compiler.errors import CandidateError, ConfigurationError, DataError
-from s1compiler.gepa_adapter import JevGEPAAdapter, components_from_program, program_from_components, optimize_gepa
+from typewright.architect import DSPyTeacher
+from typewright.errors import CandidateError, ConfigurationError, DataError
+from typewright.gepa_adapter import JevGEPAAdapter, components_from_program, program_from_components, optimize_gepa
 
 
 @dataclasses.dataclass

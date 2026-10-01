@@ -8,14 +8,14 @@ import sys
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.cli import main
-from s1compiler.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_data import HierarchySplitGuard, read_hierarchy_jsonl
-from s1compiler.hierarchy_runtime import HierarchyRuntime
-from s1compiler.io import load_document
-from s1compiler.models import Program, UseCase
-from s1compiler.runtime import Runtime
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.cli import main
+from typewright.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
+from typewright.hierarchy_data import HierarchySplitGuard, read_hierarchy_jsonl
+from typewright.hierarchy_runtime import HierarchyRuntime
+from typewright.io import load_document
+from typewright.models import Program, UseCase
+from typewright.runtime import Runtime
 
 
 ROOT = Path(__file__).resolve().parents[1] / "examples" / "hierarchy"

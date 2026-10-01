@@ -87,7 +87,7 @@ def ensure_new_output(directory: Path):
 
 def build_parser():
     parser = argparse.ArgumentParser(prog="s1", description="Declare, optimize, and run typed Jev use cases.")
-    parser.add_argument("--version", action="version", version="systemone-compiler 0.1.0")
+    parser.add_argument("--version", action="version", version="typewright 0.1.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create an editable support-triage project and synthetic dataset.")
     init.add_argument("directory", type=Path)

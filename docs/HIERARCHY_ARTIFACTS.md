@@ -49,7 +49,7 @@ graphs. Shared recovery controls, compilation, evaluation, and the study runner
 are implemented; see [release verification](HIERARCHY_RELEASE_VERIFICATION.md)
 for the merged pull requests and the one criterion that stays open.
 
-Export the source and artifact JSON schemas with `s1 schema --out schemas`.
+Export the source and artifact JSON schemas with `typewright schema --out schemas`.
 Schema generation, package import and frozen loading need only the base
 dependencies; DSPy, GEPA and the live vendor SDK remain optional compile or
 live-execution dependencies.

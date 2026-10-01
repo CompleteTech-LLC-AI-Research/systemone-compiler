@@ -1,9 +1,9 @@
 from pathlib import Path
 import pytest
-from s1compiler.architect import template_program
-from s1compiler.backends import AnswerCache, ManagedBackend, MockBackend
-from s1compiler.data import read_jsonl
-from s1compiler.models import UseCase
+from typewright.architect import template_program
+from typewright.backends import AnswerCache, ManagedBackend, MockBackend
+from typewright.data import read_jsonl
+from typewright.models import UseCase
 
 ROOT = Path(__file__).resolve().parents[1]
 

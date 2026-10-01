@@ -11,9 +11,9 @@ from email.utils import parsedate_to_datetime
 
 import httpx
 from dotenv import dotenv_values
-from s1compiler.backends import ManagedBackend, Response
-from s1compiler.errors import BackendError, ConfigurationError
-from s1compiler.io import atomic_json
+from typewright.backends import ManagedBackend, Response
+from typewright.errors import BackendError, ConfigurationError
+from typewright.io import atomic_json
 
 from parallel_backend import RoutedParallel
 
@@ -431,7 +431,7 @@ def make_backend(limit, launch, *, allow_paid=False):
 
 
 def calibration_budget_exhausted(exc, phase, backend):
-    from s1compiler.errors import BudgetExceeded
+    from typewright.errors import BudgetExceeded
 
     return (
         phase == "calibration"

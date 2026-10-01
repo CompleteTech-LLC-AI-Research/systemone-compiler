@@ -3,8 +3,8 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-from s1compiler.cli import main
-from s1compiler.hardening import propose_cases
+from typewright.cli import main
+from typewright.hardening import propose_cases
 
 
 def test_cli_demo_complete(tmp_path):
@@ -111,9 +111,9 @@ def test_mock_hierarchy_runtime_imports_no_optimizer_or_vendor(tmp_path):
     assert main(["draft", str(project / "source.json"), "--out", str(artifact)]) == 0
     root = Path(__file__).resolve().parents[1]
     env = dict(os.environ, PYTHONPATH=str(root / "src"))
-    code = ("import s1compiler,sys; from s1compiler.backends import ManagedBackend,MockBackend; "
-            "from s1compiler.hierarchy import HierarchyArtifact; "
-            "from s1compiler.hierarchy_runtime import HierarchyRuntime; "
+    code = ("import typewright,sys; from typewright.backends import ManagedBackend,MockBackend; "
+            "from typewright.hierarchy import HierarchyArtifact; "
+            "from typewright.hierarchy_runtime import HierarchyRuntime; "
             "a=HierarchyArtifact.load(sys.argv[1]); "
             "r=HierarchyRuntime(a,ManagedBackend(MockBackend(),max_calls=10)).run({'message':'refund sample'}); "
             "assert r['synthetic']; "
@@ -124,7 +124,7 @@ def test_mock_hierarchy_runtime_imports_no_optimizer_or_vendor(tmp_path):
 
 
 def test_cli_loads_reworded_frozen_graph(tmp_path, capsys):
-    from s1compiler.hierarchy import HierarchyArtifact
+    from typewright.hierarchy import HierarchyArtifact
 
     project = tmp_path / "project"
     assert main(["init", str(project), "--starter", "hierarchy"]) == 0
@@ -154,13 +154,13 @@ def test_hardening_does_not_create_fake_gold(source, splits):
 def test_runtime_import_has_no_optimizer_dependencies():
     root = Path(__file__).resolve().parents[1]
     env = dict(os.environ, PYTHONPATH=str(root / "src"))
-    code = "import s1compiler,sys; assert 'dspy' not in sys.modules; assert 'gepa' not in sys.modules; assert 'typesafe_sdk' not in sys.modules"
+    code = "import typewright,sys; assert 'dspy' not in sys.modules; assert 'gepa' not in sys.modules; assert 'typesafe_sdk' not in sys.modules"
     result = subprocess.run([sys.executable, "-c", code], env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
 
 def test_yaml_parser_error_is_terse(tmp_path, capsys):
-    from s1compiler.cli import main
+    from typewright.cli import main
     source = tmp_path / "bad.yaml"
     source.write_text('foo: [private-sensitive-value\n')
     assert main(["draft", str(source), "--out", str(tmp_path / "output.json")]) == 2

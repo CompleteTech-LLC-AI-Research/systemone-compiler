@@ -5,16 +5,16 @@ from pathlib import Path
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example
-from s1compiler.errors import BackendError, CandidateError, DataError
-from s1compiler.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
-from s1compiler.hierarchy_gepa import (HierarchyGEPAAdapter, components_from_hierarchy,
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example
+from typewright.errors import BackendError, CandidateError, DataError
+from typewright.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
+from typewright.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
+from typewright.hierarchy_gepa import (HierarchyGEPAAdapter, components_from_hierarchy,
                                        hierarchy_from_components, hierarchy_text_structure_hash,
                                        optimize_hierarchy_gepa)
-from s1compiler.hierarchy_metrics import HierarchyEvaluationFailure
-from s1compiler.io import canonical
+from typewright.hierarchy_metrics import HierarchyEvaluationFailure
+from typewright.io import canonical
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"

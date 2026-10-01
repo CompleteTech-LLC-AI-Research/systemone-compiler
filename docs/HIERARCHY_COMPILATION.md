@@ -7,7 +7,7 @@ call, including recalculation and held-out test calls. Configure `max_calls`
 before compiling; budget failures are execution failures, not low-quality rows.
 
 ```python
-from s1compiler import HierarchyCompiler, HierarchyCompileOptions
+from typewright import HierarchyCompiler, HierarchyCompileOptions
 
 compiler = HierarchyCompiler(backend, options=HierarchyCompileOptions(
     min_calibration_samples=10, max_calibration_error=0.05))

@@ -10,10 +10,10 @@ import json
 import math
 from pathlib import Path
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.io import load_document
-from s1compiler.models import Decision, Program, StateField, UseCase, project_state
-from s1compiler.runtime import Runtime
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.io import load_document
+from typewright.models import Decision, Program, StateField, UseCase, project_state
+from typewright.runtime import Runtime
 
 
 class ContractError(ValueError):

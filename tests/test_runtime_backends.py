@@ -1,11 +1,11 @@
 import sys
 import types
 import pytest
-from s1compiler.backends import (AnswerCache, Budget, ManagedBackend, MockBackend, Response,
+from typewright.backends import (AnswerCache, Budget, ManagedBackend, MockBackend, Response,
                                   TypeSafeBackend)
-from s1compiler.errors import BackendError, BudgetExceeded, ConfigurationError
-from s1compiler.models import Program
-from s1compiler.runtime import Runtime, apply_policy, normalize_answers
+from typewright.errors import BackendError, BudgetExceeded, ConfigurationError
+from typewright.models import Program
+from typewright.runtime import Runtime, apply_policy, normalize_answers
 
 
 STATE = {"message": "Please refund my duplicate payment.", "customer_plan": "team"}
@@ -274,7 +274,7 @@ def test_sum_tolerance_follows_quantization_not_a_constant():
     fixed abs_tol=1e-4 rejected. The tolerance must track the returned grid,
     stay tight for full-precision values, and still reject a malformed sum.
     """
-    from s1compiler.runtime import MAX_SUM_DRIFT, quantization_step, sum_tolerance
+    from typewright.runtime import MAX_SUM_DRIFT, quantization_step, sum_tolerance
 
     # Full-precision values get the strict tolerance.
     assert quantization_step([0.14173942690489524, 0.8582605730951048]) == 0.0
@@ -290,8 +290,8 @@ def test_sum_tolerance_follows_quantization_not_a_constant():
 
 def test_high_cardinality_quantized_choice_is_accepted(program):
     """The real 77-label shape that blocked the BANKING77 pilot."""
-    from s1compiler.models import Program
-    from s1compiler.runtime import Runtime
+    from typewright.models import Program
+    from typewright.runtime import Runtime
 
     labels = [f"label_{i}" for i in range(77)]
     data = program.model_dump(mode="json")

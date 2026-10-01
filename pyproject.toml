@@ -3,7 +3,7 @@ requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "systemone-compiler"
+name = "typewright"
 version = "0.1.0"
 description = "Declarative Jev programs, DSPy synthesis, GEPA optimization, and a lightweight typed runtime"
 readme = "README.md"
@@ -20,14 +20,17 @@ dev = ["pytest>=8,<10", "pytest-cov>=5,<8", "ruff>=0.11,<1", "build>=1,<2"]
 all = ["typesafe-sdk==0.7.0", "dspy[litellm]==3.3.1", "gepa==0.1.4", "pytest>=8,<10", "pytest-cov>=5,<8"]
 
 [project.scripts]
-s1 = "s1compiler.cli:main"
-s1-study = "s1compiler.hierarchy_study:main"
+typewright = "typewright.cli:main"
+typewright-study = "typewright.hierarchy_study:main"
+# Deprecated aliases kept for existing scripts.
+s1 = "typewright.cli:main"
+s1-study = "typewright.hierarchy_study:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-s1compiler = ["templates/**/*", "py.typed"]
+typewright = ["templates/**/*", "py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

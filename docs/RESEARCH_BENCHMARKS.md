@@ -235,8 +235,8 @@ PowerShell, repository root. All output directories/files below must be fresh.
 
 ```powershell
 .venv/Scripts/python.exe -m pip install -e ".[all,dev,research]"
-.venv/Scripts/python.exe -m s1compiler.research prepare --out runs/research-data --clean-derived
-.venv/Scripts/python.exe -m s1compiler.research verify --data runs/research-data
+.venv/Scripts/python.exe -m typewright.research prepare --out runs/research-data --clean-derived
+.venv/Scripts/python.exe -m typewright.research verify --data runs/research-data
 ```
 
 Omit `--clean-derived` to run strict raw-source preparation; audited overlap
@@ -247,11 +247,11 @@ and the mock backend. `smoke-data` samples whole groups independently of labels
 and marks the result offline-only; live registration refuses it:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.research smoke-data --data runs/research-data --out runs/research-smoke-data --smoke-groups 8
-.venv/Scripts/python.exe -m s1compiler.research register --data runs/research-smoke-data --out runs/research-smoke-protocol.json --seeds 7 --search-calls 10000 --teacher-calls 2
-.venv/Scripts/python.exe -m s1compiler.research select --protocol runs/research-smoke-protocol.json --out runs/research-smoke-frozen
-.venv/Scripts/python.exe -m s1compiler.research test --frozen runs/research-smoke-frozen --out runs/research-smoke-results
-.venv/Scripts/python.exe -m s1compiler.research report --frozen runs/research-smoke-results
+.venv/Scripts/python.exe -m typewright.research smoke-data --data runs/research-data --out runs/research-smoke-data --smoke-groups 8
+.venv/Scripts/python.exe -m typewright.research register --data runs/research-smoke-data --out runs/research-smoke-protocol.json --seeds 7 --search-calls 10000 --teacher-calls 2
+.venv/Scripts/python.exe -m typewright.research select --protocol runs/research-smoke-protocol.json --out runs/research-smoke-frozen
+.venv/Scripts/python.exe -m typewright.research test --frozen runs/research-smoke-frozen --out runs/research-smoke-results
+.venv/Scripts/python.exe -m typewright.research report --frozen runs/research-smoke-results
 ```
 
 For an authorized live study, first register full datasets with
@@ -264,10 +264,10 @@ Review the budget and baseline contracts, and configure credentials locally.
 `--share-feedback`. These flags must reflect actual consent.
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.research register --data runs/research-data --out runs/research-live-protocol.json --backend typesafe --teacher-model deepseek/deepseek-flash
-.venv/Scripts/python.exe -m s1compiler.research select --protocol runs/research-live-protocol.json --out runs/research-live-frozen --allow-paid --share-feedback --acknowledge-budget-limits
+.venv/Scripts/python.exe -m typewright.research register --data runs/research-data --out runs/research-live-protocol.json --backend typesafe --teacher-model deepseek/deepseek-flash
+.venv/Scripts/python.exe -m typewright.research select --protocol runs/research-live-protocol.json --out runs/research-live-frozen --allow-paid --share-feedback --acknowledge-budget-limits
 # Review every frozen prompt. Substitute the printed frozen-manifest digest:
-.venv/Scripts/python.exe -m s1compiler.research test --frozen runs/research-live-frozen --out runs/research-live-results --allow-paid --acknowledge-budget-limits --reviewed-manifest SHA256
+.venv/Scripts/python.exe -m typewright.research test --frozen runs/research-live-frozen --out runs/research-live-results --allow-paid --acknowledge-budget-limits --reviewed-manifest SHA256
 ```
 
 Live availability is not established by this implementation. Existing experiment

@@ -43,8 +43,8 @@ def test_optional_extras_pin_documented_integration_targets(pyproject):
 def test_checked_in_json_schemas_match_the_models():
     import json
     from pathlib import Path
-    from s1compiler.hierarchy import HierarchyArtifact, HierarchySource
-    from s1compiler.models import Program, UseCase
+    from typewright.hierarchy import HierarchyArtifact, HierarchySource
+    from typewright.models import Program, UseCase
 
     directory = Path(__file__).resolve().parents[1] / "schemas"
     expected = {"usecase.schema.json": UseCase, "program.schema.json": Program,
@@ -53,4 +53,4 @@ def test_checked_in_json_schemas_match_the_models():
     assert {path.name for path in directory.glob("*.json")} == set(expected)
     for name, model in expected.items():
         stored = json.loads((directory / name).read_text(encoding="utf-8"))
-        assert stored == model.model_json_schema(), f"{name} is stale; run `s1 schema --out schemas`"
+        assert stored == model.model_json_schema(), f"{name} is stale; run `typewright schema --out schemas`"

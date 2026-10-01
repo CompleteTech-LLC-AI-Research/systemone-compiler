@@ -7,8 +7,8 @@ the graph. It does not import DSPy, GEPA, or the live vendor SDK unless an
 application explicitly constructs the live backend.
 
 ```python
-from s1compiler import HierarchySource, HierarchyRuntime, lower_hierarchy
-from s1compiler.backends import ManagedBackend, MockBackend
+from typewright import HierarchySource, HierarchyRuntime, lower_hierarchy
+from typewright.backends import ManagedBackend, MockBackend
 
 source = HierarchySource.load("examples/hierarchy_contract/conditional.json")
 artifact = lower_hierarchy(source)

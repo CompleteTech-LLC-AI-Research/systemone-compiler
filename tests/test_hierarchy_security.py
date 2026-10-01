@@ -6,17 +6,17 @@ from pathlib import Path
 
 import pytest
 
-from s1compiler.errors import DataError
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.hierarchy import HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_runtime import HierarchyRuntime
+from typewright.errors import DataError
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.hierarchy import HierarchySource, lower_hierarchy
+from typewright.hierarchy_runtime import HierarchyRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_hierarchy_modules_have_no_dynamic_execution_or_pickle_loading():
-    modules = sorted((ROOT / "src" / "s1compiler").glob("hierarchy*.py"))
+    modules = sorted((ROOT / "src" / "typewright").glob("hierarchy*.py"))
     assert modules
     forbidden_imports = {"pickle", "subprocess", "shutil"}
     forbidden_calls = {"eval", "exec", "compile", "__import__"}

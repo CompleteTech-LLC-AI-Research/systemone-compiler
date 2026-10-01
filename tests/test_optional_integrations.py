@@ -5,8 +5,8 @@ The core adapter tests elsewhere use explicitly identified test doubles.
 """
 import inspect
 import pytest
-from s1compiler.architect import DSPyTeacher
-from s1compiler.gepa_adapter import optimize_gepa
+from typewright.architect import DSPyTeacher
+from typewright.gepa_adapter import optimize_gepa
 
 
 @pytest.mark.optional
@@ -36,7 +36,7 @@ def test_real_gepa_engine_with_fake_proposer_and_mock_model(program, splits, bac
 @pytest.mark.optional
 def test_real_dspy_signature_construction_without_inference():
     dspy = pytest.importorskip("dspy")
-    from s1compiler.hierarchy_architect import make_hierarchy_design_signature
+    from typewright.hierarchy_architect import make_hierarchy_design_signature
     hierarchy_predictor = dspy.Predict(make_hierarchy_design_signature(dspy))
     assert {"fixed_source_json", "fixed_limits_json", "train_feedback_json", "plan_json"}.issubset(
         hierarchy_predictor.signature.fields)
@@ -56,8 +56,8 @@ def test_real_typesafe_response_schema_drives_runtime(program):
     would break on the first paid call. No network or credentials are used.
     """
     sdk = pytest.importorskip("typesafe_sdk")
-    from s1compiler.backends import ManagedBackend, Response
-    from s1compiler.runtime import Runtime
+    from typewright.backends import ManagedBackend, Response
+    from typewright.runtime import Runtime
 
     response = sdk.SystemOneResponse.model_validate({
         "model": program.model,
@@ -127,7 +127,7 @@ def test_real_dspy_teacher_omits_sampling_params_by_default():
 @pytest.mark.optional
 def test_real_dspy_teacher_rejects_out_of_range_temperature():
     pytest.importorskip("dspy")
-    from s1compiler.errors import ConfigurationError
+    from typewright.errors import ConfigurationError
     with pytest.raises(ConfigurationError):
         DSPyTeacher("anthropic/placeholder-not-real", allow_paid=True, share_feedback=True,
                     temperature=2.5)

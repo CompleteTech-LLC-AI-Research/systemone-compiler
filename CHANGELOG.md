@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased: rename to Typewright
+
+- Renamed the distribution and import package from `systemone-compiler` /
+  `s1compiler` to `typewright`. The primary commands are `typewright` and
+  `typewright-study`; `s1` and `s1-study` remain as deprecated aliases. The old
+  `s1compiler` import path is removed.
+- Unchanged by design: the `.s1.json` artifact extension, `systemone-*` format
+  identifiers, the artifact provenance key, and the `S1_TEACHER_*` environment
+  variables, so existing frozen artifacts and checksums stay valid.
+- Historical verification reports, `reports/`, and the shipped manifests still
+  record the old name because they describe what was run at the time.
+
 ## Unreleased: hierarchy v1
 
 - Added a separate versioned hierarchy source and frozen graph artifact with

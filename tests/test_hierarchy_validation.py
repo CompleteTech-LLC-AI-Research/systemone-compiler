@@ -6,10 +6,10 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from s1compiler.errors import DataError
-from s1compiler.data import Example
-from s1compiler.hierarchy import HierarchySource, load_artifact, lower_hierarchy
-from s1compiler.hierarchy_validation import (validate_hierarchy_artifact,
+from typewright.errors import DataError
+from typewright.data import Example
+from typewright.hierarchy import HierarchySource, load_artifact, lower_hierarchy
+from typewright.hierarchy_validation import (validate_hierarchy_artifact,
                                              validate_hierarchy_compile_inputs, validate_hierarchy_source)
 
 
@@ -172,7 +172,7 @@ def test_rehashed_frozen_graph_cannot_change_reference_type_or_add_cycle():
     artifact = lower_hierarchy(HierarchySource.model_validate(fixture("chain")))
     data = artifact.model_dump(mode="json")
     data["nodes"][1]["inputs"]["urgent"]["field"] = "p_true"
-    from s1compiler.hierarchy import HierarchyArtifact
+    from typewright.hierarchy import HierarchyArtifact
     with pytest.raises(DataError, match="input type mismatch"):
         validate_hierarchy_artifact(HierarchyArtifact.model_validate(data))
     data = artifact.model_dump(mode="json")
@@ -182,7 +182,7 @@ def test_rehashed_frozen_graph_cannot_change_reference_type_or_add_cycle():
 
 
 def test_frozen_loader_runs_semantic_validation_after_checksum(tmp_path):
-    from s1compiler.io import atomic_json, fingerprint
+    from typewright.io import atomic_json, fingerprint
     artifact = lower_hierarchy(HierarchySource.model_validate(fixture("chain")))
     data = artifact.model_dump(mode="json")
     data["nodes"][1]["inputs"]["urgent"]["field"] = "p_true"
@@ -195,7 +195,7 @@ def test_frozen_loader_runs_semantic_validation_after_checksum(tmp_path):
 @pytest.mark.parametrize("tamper,reason", [
     ("depth", "nesting depth"), ("parent", "no parent subgraph export")])
 def test_rechecksummed_frozen_nesting_is_rejected(tmp_path, tamper, reason):
-    from s1compiler.io import atomic_json, fingerprint
+    from typewright.io import atomic_json, fingerprint
 
     artifact = lower_hierarchy(HierarchySource.model_validate(_nested_chain(2)))
     data = artifact.model_dump(mode="json")
@@ -387,11 +387,11 @@ def _measured_artifact_data(digest):
 
 @pytest.mark.parametrize("digest", ["", "abc", "A" * 64, "g" * 64, 12345, None, "a" * 63, "a" * 65])
 def test_measured_artifact_requires_a_sha256_composition_report_digest(digest):
-    from s1compiler.hierarchy import HierarchyArtifact
+    from typewright.hierarchy import HierarchyArtifact
     with pytest.raises(ValidationError, match="SHA-256 composition report checksum"):
         HierarchyArtifact.model_validate(_measured_artifact_data(digest))
 
 
 def test_measured_artifact_accepts_a_well_formed_report_digest():
-    from s1compiler.hierarchy import HierarchyArtifact
+    from typewright.hierarchy import HierarchyArtifact
     HierarchyArtifact.model_validate(_measured_artifact_data("a" * 64))

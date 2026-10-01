@@ -1,6 +1,6 @@
 <div align="center">
 
-# System One Compiler
+# Typewright
 
 **Declare a decision. Compile typed Jev questions. Measure them. Ship a JSON program.**
 
@@ -12,7 +12,8 @@
 
 ---
 
-A Python 0.1 implementation of a declarative TypeSafe AI/Jev framework, with a
+Typewright (formerly System One Compiler) is a Python 0.1 implementation of a
+declarative TypeSafe AI/Jev framework, with a
 DSPy architect, a standalone GEPA adapter, bounded structural search, separate
 policy fitting, and a lightweight runtime. The application developer works with
 **state, decisions, labeled examples, and compile**, rather than DSPy internals.
@@ -67,7 +68,7 @@ not need a TypeSafe account, DSPy, GEPA, or an optimizer model.
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 .\.venv\Scripts\python.exe -m pytest -q
-.\.venv\Scripts\python.exe -m s1compiler demo --out runs/first-demo
+.\.venv\Scripts\python.exe -m typewright demo --out runs/first-demo
 ```
 
 **macOS/Linux:**
@@ -76,7 +77,7 @@ python -m venv .venv
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 .venv/bin/python -m pytest -q
-.venv/bin/python -m s1compiler demo --out runs/first-demo
+.venv/bin/python -m typewright demo --out runs/first-demo
 ```
 
 Installation can require internet to obtain dependencies. The **demo itself**
@@ -168,31 +169,31 @@ format dispatch, shared call budgets, result statuses, and compatibility.
 
 | Command | Purpose |
 |---|---|
-| `s1 init my-use-case` | Create a starter with an editable spec and synthetic data. |
-| `s1 draft spec.yaml --out draft.s1.json` | Create a typed template draft without model calls. |
-| `s1 compile ...` | Select architecture/wording, fit policy, freeze, then test. |
-| `s1 run artifact --state input.json` | Execute a program and return typed decisions. |
-| `s1 evaluate artifact --data cases.jsonl --out report.json` | Measure a frozen program without changing it. |
-| `s1 harden spec.yaml --data cases.jsonl --out proposals.json` | Propose robustness cases that need label review. |
-| `s1 inspect artifact` | Verify checksum and inspect the complete program. |
-| `s1 export-playground artifact --state input.json --out request.json` | Export native state/model/questions; policies remain local. |
-| `s1 schema --out schemas` | Export JSON schemas for tooling. |
-| `s1 doctor --check-optional` | Check installed dependency interfaces without inference. |
-| `s1 demo --out runs/demo` | Exercise the whole pipeline with a no-key synthetic fixture. |
-| `s1-study register/manifest/review/select/test/reconcile/report` | Preregister, review a live manifest, and replay a separate three-arm hierarchy comparison. |
+| `typewright init my-use-case` | Create a starter with an editable spec and synthetic data. |
+| `typewright draft spec.yaml --out draft.s1.json` | Create a typed template draft without model calls. |
+| `typewright compile ...` | Select architecture/wording, fit policy, freeze, then test. |
+| `typewright run artifact --state input.json` | Execute a program and return typed decisions. |
+| `typewright evaluate artifact --data cases.jsonl --out report.json` | Measure a frozen program without changing it. |
+| `typewright harden spec.yaml --data cases.jsonl --out proposals.json` | Propose robustness cases that need label review. |
+| `typewright inspect artifact` | Verify checksum and inspect the complete program. |
+| `typewright export-playground artifact --state input.json --out request.json` | Export native state/model/questions; policies remain local. |
+| `typewright schema --out schemas` | Export JSON schemas for tooling. |
+| `typewright doctor --check-optional` | Check installed dependency interfaces without inference. |
+| `typewright demo --out runs/demo` | Exercise the whole pipeline with a no-key synthetic fixture. |
+| `typewright-study register/manifest/review/select/test/reconcile/report` | Preregister, review a live manifest, and replay a separate three-arm hierarchy comparison. |
 
-For an authored graph, run `s1 init my-graph --starter hierarchy` or
-`s1 demo --starter hierarchy --out runs/graph-demo`. Both keep the flat starter
+For an authored graph, run `typewright init my-graph --starter hierarchy` or
+`typewright demo --starter hierarchy --out runs/graph-demo`. Both keep the flat starter
 as the default. The hierarchy starter includes `source.json`, four disjoint
 synthetic JSONL splits, and `sample_state.json`. Compile with:
 
 ```bash
-s1 compile my-graph/source.json --train my-graph/train.jsonl --validation my-graph/validation.jsonl --calibration my-graph/calibration.jsonl --test my-graph/test.jsonl --out runs/graph-compile
-s1 run runs/graph-compile/hierarchy.s1.json --state my-graph/sample_state.json
-s1 inspect runs/graph-compile/hierarchy.s1.json
+typewright compile my-graph/source.json --train my-graph/train.jsonl --validation my-graph/validation.jsonl --calibration my-graph/calibration.jsonl --test my-graph/test.jsonl --out runs/graph-compile
+typewright run runs/graph-compile/hierarchy.s1.json --state my-graph/sample_state.json
+typewright inspect runs/graph-compile/hierarchy.s1.json
 ```
 
-The same four split paths are required for `s1 evaluate` of a frozen hierarchy;
+The same four split paths are required for `typewright evaluate` of a frozen hierarchy;
 `--split` selects which registered split to measure without fitting. Hierarchy
 `inspect` shows expanded topology, source mappings, conditions, limits, final
 candidate probability scopes, gates, and provenance. `export-playground` needs
@@ -202,7 +203,7 @@ leaf input produced elsewhere. Supplied leaf input does not prove the graph
 would route there. A native request cannot encode the whole graph. All
 starter labels and mock results are synthetic and are not Jev quality claims.
 
-Use `python -m s1compiler` wherever the `s1` executable is not on PATH. Each
+Use `python -m typewright` wherever the `typewright` executable is not on PATH. `s1` and `s1-study` remain as deprecated aliases. Each
 subcommand has `--help`. The default backend is deliberately **mock**; live runs
 must explicitly select `--backend typesafe`.
 
@@ -210,7 +211,7 @@ must explicitly select `--backend typesafe`.
 
 ```bash
 python -m pip install -e '.[all,dev]'
-s1 doctor --check-optional
+typewright doctor --check-optional
 python -m pytest -q
 ```
 
@@ -235,8 +236,8 @@ in setup logs. Third-party request logging can expose data; read
 Only after the operator authorizes the call and configures the key:
 
 ```bash
-s1 draft examples/support_triage/usecase.yaml --out runs/live-draft.s1.json
-s1 run runs/live-draft.s1.json \
+typewright draft examples/support_triage/usecase.yaml --out runs/live-draft.s1.json
+typewright run runs/live-draft.s1.json \
   --state examples/support_triage/sample_state.json \
   --backend typesafe --allow-paid --allow-unvalidated --max-calls 1 --no-cache
 ```
@@ -251,7 +252,7 @@ examples to the configured teacher. Run it only with permission and suitable dat
 Bash line continuations are shown; in PowerShell use one line or backticks.
 
 ```bash
-s1 compile examples/support_triage/usecase.yaml \
+typewright compile examples/support_triage/usecase.yaml \
   --train examples/support_triage/train.jsonl \
   --validation examples/support_triage/validation.jsonl \
   --calibration examples/support_triage/calibration.jsonl \
@@ -334,8 +335,8 @@ coding agent turn another task into a spec and an honest evaluation plan.
 ## Production-shaped runtime
 
 ```python
-from s1compiler import Program, Runtime
-from s1compiler.backends import ManagedBackend, TypeSafeBackend
+from typewright import Program, Runtime
+from typewright.backends import ManagedBackend, TypeSafeBackend
 
 program = Program.load("runs/live-001/program.s1.json")
 backend = ManagedBackend(TypeSafeBackend(allow_paid=True), max_calls=100)
@@ -358,7 +359,7 @@ monitoring, and any downstream actions.
 ## Development
 
 ```bash
-python -m pytest -q --cov=s1compiler --cov-report=term-missing
+python -m pytest -q --cov=typewright --cov-report=term-missing
 python -m ruff check src tests examples
 python -m build
 ```
@@ -368,4 +369,5 @@ when a dependency is missing. Test-double adapter tests are labeled separately.
 CI configuration includes both a core matrix and an optional-contract job.
 See `docs/BUILD_REPORT.md` for which of these commands actually ran during
 packaging. License: MIT. This is an independent project, not an official TypeSafe,
-DSPy, or GEPA product.
+DSPy, or GEPA product. Jev, TypeSafe, DSPy, and GEPA are names of their respective
+owners and are used here only to describe compatibility.

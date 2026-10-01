@@ -9,18 +9,18 @@ import sys
 import pytest
 from pydantic import ValidationError
 
-from s1compiler.cli import main
-from s1compiler.errors import ConfigurationError, DataError
-from s1compiler.hierarchy import HierarchyArtifact, HierarchySource, load_artifact, lower_hierarchy
-from s1compiler.io import atomic_json
-from s1compiler.models import Program
+from typewright.cli import main
+from typewright.errors import ConfigurationError, DataError
+from typewright.hierarchy import HierarchyArtifact, HierarchySource, load_artifact, lower_hierarchy
+from typewright.io import atomic_json
+from typewright.models import Program
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
 
 
 def test_external_deployment_claim_is_metadata_and_does_not_authorize_paid_backend(tmp_path):
-    from s1compiler.backends import TypeSafeBackend
+    from typewright.backends import TypeSafeBackend
 
     original = lower_hierarchy(HierarchySource.load(FIXTURES / "chain.json"))
     claimed = original.model_copy(deep=True)
@@ -120,7 +120,7 @@ def test_rehashed_but_inconsistent_artifact_is_rejected(tmp_path):
     data = artifact.model_dump(mode="json")
     data["nodes"][0]["inputs"]["note"] = {"root": "undeclared"}
     target = tmp_path / "bad.json"
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     atomic_json(target, {"artifact": data, "sha256": fingerprint(data)})
     with pytest.raises(ValidationError, match="Unknown root state reference"):
         load_artifact(target)
@@ -210,7 +210,7 @@ def guarded(name, *args, **kwargs):
         raise AssertionError('optional dependency imported: ' + name)
     return original(name, *args, **kwargs)
 builtins.__import__ = guarded
-from s1compiler import load_artifact
+from typewright import load_artifact
 assert len(load_artifact(__import__('sys').argv[1]).nodes) == 2
 """
     env = os.environ.copy()

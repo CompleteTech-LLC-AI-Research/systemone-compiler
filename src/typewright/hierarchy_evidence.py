@@ -27,7 +27,7 @@ MAX_LINE_BYTES = 8_000_000
 
 def package_version() -> str:
     try:
-        return metadata.version("systemone-compiler")
+        return metadata.version("typewright")
     except metadata.PackageNotFoundError:
         return "source-uninstalled"
 

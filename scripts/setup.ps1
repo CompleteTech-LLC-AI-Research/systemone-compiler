@@ -12,15 +12,15 @@ $Extras = ".[dev]"
 if ($Full) { $Extras = ".[all,dev]" }
 & $Python -m pip install -e $Extras
 if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
-& $Python -m s1compiler doctor
+& $Python -m typewright doctor
 if ($LASTEXITCODE -ne 0) { throw "Core doctor checks failed." }
 if ($Full) {
-    & $Python -m s1compiler doctor --check-optional
+    & $Python -m typewright doctor --check-optional
     if ($LASTEXITCODE -ne 0) { throw "Optional dependency contracts failed." }
 }
 & $Python -m pytest -q
 if ($LASTEXITCODE -ne 0) { throw "Tests failed." }
 $Run = "runs/setup-demo-" + (Get-Date -Format "yyyyMMdd-HHmmss") + "-" + $PID
-& $Python -m s1compiler demo --out $Run
+& $Python -m typewright demo --out $Run
 if ($LASTEXITCODE -ne 0) { throw "Synthetic demo failed." }
 Write-Output "Local setup and synthetic demo complete. No live inference was run."
