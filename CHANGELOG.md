@@ -18,5 +18,9 @@
   attestations, and a live `select --reviewed-manifest` gate that refuses any
   parameter drift before building a provider or teacher. No live study has
   been registered, reviewed, or executed.
+- Rebuilt the tracked `wheels/` wheel from current main so it includes the hierarchy modules and
+  the `s1-study` entry point, and refreshed the hashes in `MANIFEST.sha256` for files changed since
+  it was last updated. `MANIFEST.sha256.as-shipped` is unchanged. Release wheels remain unsigned
+  local builds, and the manifest is an integrity check, not a signature.
 
 See [migration](docs/HIERARCHY_MIGRATION.md) for format and caller changes.
