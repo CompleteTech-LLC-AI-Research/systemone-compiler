@@ -245,7 +245,7 @@ def test_calibration_factory_uses_only_native_and_keeps_budget(tmp_path):
     launch = SimpleNamespace(
         make_backend=lambda paid, n: ManagedBackend(MockBackend(), max_calls=n, cache=None)
     )
-    backend = r.make_calibration_backend(13, launch)
+    backend = r.make_calibration_backend(13, launch, allow_paid=True)
     try:
         assert backend.budget.maximum == 13
         assert list(backend.configs) == ["direct"]
@@ -265,3 +265,42 @@ def test_cooldown_is_capped_so_a_hostile_retry_after_cannot_freeze_a_group():
     assert s.groups["vercel"] == 100.0 + r.MAX_COOLDOWN_SECONDS
     now[0] += r.MAX_COOLDOWN_SECONDS + 1
     assert s.take_ready() == "v2"
+
+
+@pytest.mark.parametrize("consent", [None, False, "true", 1, 0])
+def test_paid_backends_refuse_without_explicit_boolean_consent(consent):
+    from s1compiler.errors import ConfigurationError
+    called = []
+    launch = SimpleNamespace(make_backend=lambda paid, n: called.append(paid))
+    kwargs = {} if consent is None else {"allow_paid": consent}
+    with pytest.raises(ConfigurationError, match="explicit consent"):
+        r.make_backend(5, launch, **kwargs)
+    with pytest.raises(ConfigurationError, match="explicit consent"):
+        r.make_calibration_backend(5, launch, **kwargs)
+    assert called == []
+
+
+def test_consent_is_forwarded_to_the_direct_backend_not_hard_coded():
+    from s1compiler.backends import MockBackend
+    received = []
+
+    def make(paid, n):
+        received.append(paid)
+        return ManagedBackend(MockBackend(), max_calls=n, cache=None)
+
+    backend = r.make_calibration_backend(3, SimpleNamespace(make_backend=make), allow_paid=True)
+    try:
+        backend.launch = None
+        backend.factories["direct"](3).close()
+    finally:
+        backend.close()
+    assert received == [True]
+
+
+def test_every_gateway_route_including_one_and_two_needs_its_enable_flag():
+    assert list(r.configurations({})) == ["direct"]
+    assert list(r.configurations({"AI_GATEWAY_ROUTE_1_ENABLED": "yes"})) == ["direct"]
+    enabled = r.configurations({"AI_GATEWAY_ROUTE_1_ENABLED": "true", "AI_GATEWAY_ROUTE_2_ENABLED": "true"})
+    assert list(enabled) == ["direct", "gateway-1", "gateway-2"]
+    only_two = r.configurations({"AI_GATEWAY_ROUTE_2_ENABLED": "true"})
+    assert list(only_two) == ["direct", "gateway-2"]
