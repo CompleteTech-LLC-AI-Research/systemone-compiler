@@ -211,20 +211,27 @@ def test_changed_child_wire_payload_causes_cache_miss():
     backend.close()
 
 
-def test_deadline_after_late_completion_preserves_charged_first_leaf():
+def test_deadline_after_late_completion_preserves_charged_first_leaf(monkeypatch):
+    clock = {"now": 100.0}
+    monkeypatch.setattr(time, "monotonic", lambda: clock["now"])
+
     class Late(Recording):
         def evaluate(self, program, state):
-            time.sleep(0.02)
-            return super().evaluate(program, state)
+            response = super().evaluate(program, state)
+            # The first dispatched leaf completes after the deadline. No wall-clock
+            # scheduling delay may expire the run before that dispatch.
+            clock["now"] += 2.0
+            return response
 
     recorder = Late()
     backend = ManagedBackend(recorder)
-    result = HierarchyRuntime(chain(), backend).run({"message": "urgent outage"}, timeout_seconds=0.001)
+    result = HierarchyRuntime(chain(), backend).run({"message": "urgent outage"}, timeout_seconds=1.0)
     assert result["status"] == "cancelled"
     assert result["executed"] == ["signal"]
     assert result["stages"]["signal"]["status"] == "completed"
     assert result["accounting"]["requests_attempted"] == 1
     assert result["accounting"]["attempt_ledger"]["receipts"][0]["status"] == "validated"
+    assert len(recorder.calls) == 1
     backend.close()
 
 
