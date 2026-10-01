@@ -15,7 +15,9 @@ class CandidateError(S1Error):
 
 
 class BackendError(S1Error):
-    pass
+    """Provider failure. `transient` is set only by a backend that knows a retry may succeed."""
+
+    transient = False
 
 
 class BudgetExceeded(S1Error):
