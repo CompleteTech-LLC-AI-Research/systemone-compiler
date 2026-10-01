@@ -236,3 +236,80 @@ def test_numeric_route_intervals_prove_disjointness_and_detect_overlap():
     first["when"]["all"].append({"ref": {"root": "risk"}, "op": "gte", "value": 3})
     with pytest.raises(DataError, match="unreachable contradictory numeric route"):
         lower_hierarchy(HierarchySource.model_validate(data))
+
+
+# --- graph size, call, and nesting-depth limits (bounded acyclic plans) -------------------------
+_CONTRACT = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
+
+
+def _contract(name):
+    return json.loads((_CONTRACT / name).read_text(encoding="utf-8"))
+
+
+def _nested_chain(levels, max_depth=None):
+    """Root stages call level_1, which calls level_2, and so on; the last level holds the leaf."""
+    data = _contract("nested.json")
+    leaf = data["definitions"]["check_note"]
+    definitions = {}
+    for level in range(levels, 0, -1):
+        if level == levels:
+            definitions[f"level_{level}"] = copy.deepcopy(leaf)
+            continue
+        definitions[f"level_{level}"] = {
+            "inputs": copy.deepcopy(leaf["inputs"]), "outputs": copy.deepcopy(leaf["outputs"]),
+            "stages": [{"id": "inner", "kind": "subgraph", "definition": f"level_{level + 1}",
+                        "inputs": {"note": {"root": "note"}}}],
+            "final": {"review": {"candidates": [{"stage": "inner", "decision": "review",
+                                                  "distribution_scope": "full_contract"}],
+                                 "on_missing": "review_required"}}}
+    data["definitions"] = definitions
+    for stage in data["graph"]["stages"]:
+        stage["definition"] = "level_1"
+    if max_depth is not None:
+        data["limits"] = {**data["limits"], "max_depth": max_depth}
+    return data
+
+
+@pytest.mark.parametrize("field,value", [("max_expanded_nodes", 65), ("max_depth", 9),
+                                         ("max_native_calls_per_example", 65)])
+def test_limits_cannot_be_raised_above_the_hard_ceilings(field, value):
+    data = _contract("chain.json")
+    data["limits"] = {**data["limits"], field: value}
+    with pytest.raises(ValidationError):
+        HierarchySource.model_validate(data)
+
+
+@pytest.mark.parametrize("field,message", [("max_expanded_nodes", "Expanded node limit exceeded"),
+                                           ("max_native_calls_per_example", "native call limit exceeded")])
+def test_lowering_rejects_a_graph_larger_than_its_declared_limits(field, message):
+    data = _contract("chain.json")
+    data["limits"] = {**data["limits"], field: 1}  # chain.json expands to two leaf calls
+    with pytest.raises(DataError, match=message):
+        lower_hierarchy(HierarchySource.model_validate(data))
+
+
+def test_nested_expansion_counts_toward_the_node_limit():
+    data = _contract("nested.json")
+    data["limits"] = {**data["limits"], "max_expanded_nodes": 2}
+    with pytest.raises(DataError, match="Expanded node limit exceeded"):
+        lower_hierarchy(HierarchySource.model_validate(data))
+
+
+@pytest.mark.parametrize("levels,accepted", [(1, True), (3, True), (8, True), (9, False)])
+def test_default_nesting_depth_boundary_is_eight(levels, accepted):
+    data = _nested_chain(levels)
+    if accepted:
+        assert len(lower_hierarchy(HierarchySource.model_validate(data)).nodes) == 2
+    else:
+        with pytest.raises(ValidationError):
+            HierarchySource.model_validate(data)
+
+
+@pytest.mark.parametrize("max_depth,accepted", [(2, False), (3, True), (4, True)])
+def test_declared_depth_limit_is_enforced_exactly(max_depth, accepted):
+    data = _nested_chain(3, max_depth)
+    if accepted:
+        assert len(lower_hierarchy(HierarchySource.model_validate(data)).nodes) == 2
+    else:
+        with pytest.raises(ValidationError):
+            HierarchySource.model_validate(data)
