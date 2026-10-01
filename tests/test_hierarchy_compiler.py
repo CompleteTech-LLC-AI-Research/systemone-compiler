@@ -121,6 +121,44 @@ def test_owner_budget_failure_is_not_a_zero_quality_candidate():
     assert backend.budget.used == 1
 
 
+def test_route_policy_change_requires_fresh_preflight_and_new_execution():
+    source, splits = inputs()
+
+    class Recording(MockBackend):
+        def __init__(self):
+            self.calls = []
+
+        def evaluate(self, program, state):
+            self.calls.append(program.name)
+            return super().evaluate(program, state)
+
+    recorder = Recording()
+    backend = ManagedBackend(recorder)
+    authored = lower_hierarchy(source)
+    old_guard = HierarchySplitGuard(authored, splits)
+    _, old_results = evaluate_hierarchy(authored, splits["validation"], backend,
+                                        guard=old_guard, split="validation")
+    assert recorder.calls == ["router", "technical"]
+    assert old_results[0]["status"] == "completed"
+    changed_source = source.model_copy(deep=True)
+    changed_source.graph.stages[0].program.policies["department"].force_review = True
+    changed = lower_hierarchy(changed_source)
+    with pytest.raises(DataError, match="changed"):
+        old_guard.bind(changed, "validation", splits["validation"][0])
+    assert recorder.calls == ["router", "technical"]
+    fresh_guard = HierarchySplitGuard(changed, splits)
+    report, fresh_results = evaluate_hierarchy(changed, splits["validation"], backend,
+                                              guard=fresh_guard, split="validation")
+    assert recorder.calls == ["router", "technical", "router"]
+    assert fresh_results[0]["graph_sha256"] == changed.content_hash != authored.content_hash
+    assert fresh_results[0]["status"] == "review_required"
+    assert fresh_results[0]["stages"]["technical"]["status"] == "review_blocked"
+    assert fresh_results[0]["decisions"] == {}
+    assert report["quality_by_root_id"] == {"valid": 0.0}
+    assert old_results[0]["graph_sha256"] == authored.content_hash
+    assert old_results[0]["decisions"]["resolution"]["value"] == "bug_fix"
+
+
 def test_changed_dataset_cannot_be_frozen_or_sent_to_test():
     source, splits = inputs()
     compiler = HierarchyCompiler(ManagedBackend(MockBackend()),
