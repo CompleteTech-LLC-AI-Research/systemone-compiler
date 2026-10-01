@@ -313,3 +313,53 @@ def test_declared_depth_limit_is_enforced_exactly(max_depth, accepted):
     else:
         with pytest.raises(ValidationError):
             HierarchySource.model_validate(data)
+
+
+def _chain_with_score_route(op, value):
+    """chain.json routes its second stage on a Noul; add a stage routed on the 3-level Score."""
+    data = fixture("chain")
+    extra = copy.deepcopy(data["graph"]["stages"][0])
+    extra["id"] = "escalate"
+    extra["program"]["name"] = "escalate"
+    extra["when"] = {"all": [{"ref": {"stage": "priority", "decision": "priority", "field": "value"},
+                              "op": op, "value": value}]}
+    data["graph"]["stages"].append(extra)
+    return data
+
+
+@pytest.mark.parametrize("op,value", [("gte", 3), ("gt", 99), ("gte", -1), ("lt", 2.5), ("lte", -0.5)])
+def test_score_route_constant_outside_the_declared_scale_is_rejected(op, value):
+    # priority is a three-level Score, so its value lies on 0..2.
+    with pytest.raises(DataError, match="Score route constant is outside the declared scale"):
+        lower_hierarchy(HierarchySource.model_validate(_chain_with_score_route(op, value)))
+
+
+@pytest.mark.parametrize("op,value", [("gte", 0), ("gte", 1), ("gt", 1), ("lt", 2), ("lte", 2)])
+def test_score_route_constant_inside_the_scale_is_not_flagged_as_out_of_range(op, value):
+    # The added stage has no final candidate, so validation still rejects it, but not for the scale.
+    with pytest.raises(DataError) as error:
+        lower_hierarchy(HierarchySource.model_validate(_chain_with_score_route(op, value)))
+    assert "outside the declared scale" not in str(error.value)
+
+
+def _measured_artifact_data(digest):
+    artifact = lower_hierarchy(HierarchySource.model_validate(fixture("chain")))
+    data = artifact.model_dump(mode="json")
+    for node in data["nodes"]:
+        node["program"]["provenance"] = {**node["program"]["provenance"], "status": "measured"}
+    data["provenance"] = {**data["provenance"], "status": "measured", "composition_measured": True,
+                          "evidence": {**data["provenance"]["evidence"],
+                                       "composition_report_sha256": digest}}
+    return data
+
+
+@pytest.mark.parametrize("digest", ["", "abc", "A" * 64, "g" * 64, 12345, None, "a" * 63, "a" * 65])
+def test_measured_artifact_requires_a_sha256_composition_report_digest(digest):
+    from s1compiler.hierarchy import HierarchyArtifact
+    with pytest.raises(ValidationError, match="SHA-256 composition report checksum"):
+        HierarchyArtifact.model_validate(_measured_artifact_data(digest))
+
+
+def test_measured_artifact_accepts_a_well_formed_report_digest():
+    from s1compiler.hierarchy import HierarchyArtifact
+    HierarchyArtifact.model_validate(_measured_artifact_data("a" * 64))

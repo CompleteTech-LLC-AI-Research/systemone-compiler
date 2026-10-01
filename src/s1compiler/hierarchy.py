@@ -5,6 +5,7 @@ wire shapes, bounded definition expansion, integrity, and provenance.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Annotated, Literal
 
@@ -316,8 +317,9 @@ class HierarchyArtifact(StrictModel):
         if self.provenance.status == "measured":
             if not self.provenance.composition_measured:
                 raise ValueError("Measured hierarchy requires measured composition evidence.")
-            if not self.provenance.evidence.get("composition_report_sha256"):
-                raise ValueError("Measured hierarchy requires a composition report checksum.")
+            report_digest = self.provenance.evidence.get("composition_report_sha256")
+            if not isinstance(report_digest, str) or not re.fullmatch(r"[0-9a-f]{64}", report_digest):
+                raise ValueError("Measured hierarchy requires a SHA-256 composition report checksum.")
             if any(node.program.provenance.get("status") != "measured" for node in self.nodes):
                 raise ValueError("Measured hierarchy cannot contain unmeasured leaves.")
         child_hashes = self.provenance.evidence.get("child_hashes")

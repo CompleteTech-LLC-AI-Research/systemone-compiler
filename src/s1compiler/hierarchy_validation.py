@@ -108,6 +108,11 @@ def _condition(condition: Condition | None, inputs: dict[str, StateField],
             values = predicate.value if predicate.op == "in" else [predicate.value]
             if any(value not in decision.criteria for value in values):
                 _fail(scope, stage, "unknown Choice label in condition")
+        if (decision is not None and decision.type == "score" and
+                predicate.op in {"lt", "lte", "gt", "gte"} and
+                not 0 <= predicate.value <= len(decision.criteria) - 1):
+            # A Score value lies on 0..levels-1, so a constant outside it is always or never true.
+            _fail(scope, stage, "Score route constant is outside the declared scale")
     for predicate in condition.all:
         if predicate.op in {"eq", "in"} and not _atom(condition, predicate.ref):
             _fail(scope, stage, "unreachable contradictory route condition")
