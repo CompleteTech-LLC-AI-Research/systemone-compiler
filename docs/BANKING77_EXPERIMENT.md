@@ -120,16 +120,16 @@ or persistent optimizer checkpoint is enabled.
 Prepare public data only; no model calls. Choose fresh directories for every run:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.banking77 prepare --out runs/banking77-data
-.venv/Scripts/python.exe -m s1compiler.banking77 plan --data runs/banking77-data
+.venv/Scripts/python.exe -m typewright.banking77 prepare --out runs/banking77-data
+.venv/Scripts/python.exe -m typewright.banking77 plan --data runs/banking77-data
 ```
 
 Exercise all four arms with a mock model and an identity proposer, using the real
 installed GEPA package. This is ONLY an offline plumbing check:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.banking77 select --data runs/banking77-data --out runs/banking77-offline --seeds 7
-.venv/Scripts/python.exe -m s1compiler.banking77 test --data runs/banking77-data --frozen runs/banking77-offline --out runs/banking77-offline-results
+.venv/Scripts/python.exe -m typewright.banking77 select --data runs/banking77-data --out runs/banking77-offline --seeds 7
+.venv/Scripts/python.exe -m typewright.banking77 test --data runs/banking77-data --frozen runs/banking77-offline --out runs/banking77-offline-results
 ```
 
 Before live search, review `usecase.json` and verify a full 77-label native request
@@ -137,9 +137,9 @@ with one separately authorized call. Existing CLI commands can build and run the
 baseline against a locally prepared train state:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler draft runs/banking77-data/usecase.json --out runs/banking77-smoke.s1.json
+.venv/Scripts/python.exe -m typewright draft runs/banking77-data/usecase.json --out runs/banking77-smoke.s1.json
 # Create smoke-state.json with {"text": "..."} from a TRAIN example only.
-.venv/Scripts/python.exe -m s1compiler run runs/banking77-smoke.s1.json --state smoke-state.json --backend typesafe --allow-paid --allow-unvalidated --max-calls 1 --no-cache
+.venv/Scripts/python.exe -m typewright run runs/banking77-smoke.s1.json --state smoke-state.json --backend typesafe --allow-paid --allow-unvalidated --max-calls 1 --no-cache
 ```
 
 After explicit paid-call and teacher-sharing consent, configure credentials
@@ -148,7 +148,7 @@ required. `.env` is not loaded automatically. Never put credentials in command
 arguments or reports. Replace the model placeholder with the agreed real teacher:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.banking77 select --data runs/banking77-data --out runs/banking77-live --backend typesafe --allow-paid --share-feedback --acknowledge-budget-limits --teacher-model PROVIDER/MODEL
+.venv/Scripts/python.exe -m typewright.banking77 select --data runs/banking77-data --out runs/banking77-live --backend typesafe --allow-paid --share-feedback --acknowledge-budget-limits --teacher-model PROVIDER/MODEL
 ```
 
 `select` writes all frozen `.s1.json` artifacts, per-arm selection/accounting
@@ -157,7 +157,7 @@ SHA256. It makes no test requests. Review every frozen prompt's meaning before
 acknowledging that exact digest. Then, with separately budgeted test calls:
 
 ```powershell
-.venv/Scripts/python.exe -m s1compiler.banking77 test --data runs/banking77-data --frozen runs/banking77-live --out runs/banking77-live-results --backend typesafe --allow-paid --acknowledge-budget-limits --reviewed-manifest MANIFEST_SHA256
+.venv/Scripts/python.exe -m typewright.banking77 test --data runs/banking77-data --frozen runs/banking77-live --out runs/banking77-live-results --backend typesafe --allow-paid --acknowledge-budget-limits --reviewed-manifest MANIFEST_SHA256
 ```
 
 Testing verifies every program, the dataset, and frozen implementation hashes

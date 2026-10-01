@@ -1,6 +1,6 @@
 # Coding-agent setup prompt — System One Compiler
 
-You are setting up the existing `systemone-compiler` project contained in this
+You are setting up the existing `typewright` project contained in this
 folder. It is an implemented Python framework, not a request to generate a new
 architecture. Preserve the working design; fix specific verified defects rather
 than rewriting it wholesale.
@@ -34,9 +34,9 @@ has been established by the bundled synthetic fixture.
 
    ```text
    python -m pip install -e ".[dev]"
-   python -m s1compiler doctor
-   python -m pytest -q --cov=s1compiler --cov-report=term-missing
-   python -m s1compiler demo --out runs/setup-demo-UNIQUE
+   python -m typewright doctor
+   python -m pytest -q --cov=typewright --cov-report=term-missing
+   python -m typewright demo --out runs/setup-demo-UNIQUE
    ```
 
    Replace `python` with the actual venv interpreter. Choose a new run directory;
@@ -45,7 +45,7 @@ has been established by the bundled synthetic fixture.
    Confirm that output explicitly says synthetic and optimizer none.
 
 3. Install optional integrations with `python -m pip install -e ".[all,dev]"`.
-   Run `python -m s1compiler doctor --check-optional`, the full test suite, and
+   Run `python -m typewright doctor --check-optional`, the full test suite, and
    `python -m ruff check src tests examples`. The optional tests include real SDK
    shape validation, the real GEPA engine with a mock task/fake proposer, and DSPy
    signature construction without inference. These tests must stop skipping only
@@ -63,8 +63,8 @@ has been established by the bundled synthetic fixture.
    the Python/platform/provider compatibility scope of that lock.
 
 5. Run `python -m build`. Install the wheel in a fresh temporary environment or
-   target directory, then verify `s1 init`, `s1 demo`, and the packaged starter
-   data work outside the source tree. Ensure `import s1compiler` does not import
+   target directory, then verify `typewright init`, `typewright demo`, and the packaged starter
+   data work outside the source tree. Ensure `import typewright` does not import
    DSPy, GEPA, or the TypeSafe SDK. Keep production/runtime dependencies separate
    from optimizer dependencies.
 
@@ -75,14 +75,14 @@ has been established by the bundled synthetic fixture.
    ground truth. Review the support-triage dataset card.
 
 7. Verify the separate hierarchy path without provider calls: run
-   `python -m s1compiler demo --starter hierarchy --out runs/setup-graph-UNIQUE`,
-   inspect its frozen artifact and result statuses, and run `s1-study` through
+   `python -m typewright demo --starter hierarchy --out runs/setup-graph-UNIQUE`,
+   inspect its frozen artifact and result statuses, and run `typewright-study` through
    register/select/test/report on the checked-in synthetic support fixture using
    fresh output paths. Confirm the study report says synthetic and that the
-   installed wheel includes `s1-study` and hierarchy starter data. See
+   installed wheel includes `typewright-study` and hierarchy starter data. See
    `docs/HIERARCHY_MIGRATION.md` and `docs/HIERARCHY_STUDY.md`; neither workflow
-   authorizes a live study. A live study additionally needs `s1-study manifest`
-   and a human-completed `s1-study review` before paid selection.
+   authorizes a live study. A live study additionally needs `typewright-study manifest`
+   and a human-completed `typewright-study review` before paid selection.
 
 ## Credentials, privacy, and live calls
 

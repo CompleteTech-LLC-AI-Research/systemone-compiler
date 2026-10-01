@@ -14,8 +14,9 @@ expands local definitions into stable qualified instances such as `first/check`
 and `second/check`, embeds each leaf program, records virtual subgraph exports,
 and produces `systemone-hierarchy/v1`. Definitions are not fetched at load or
 run time. The source-to-node map links each authoring leaf to all expanded
-instances. The format limits depth, expanded stages and possible native calls;
-the caller's request budget may be lower.
+instances. The format limits depth (8), expanded stages (64, counting leaves plus virtual
+subgraph exports) and possible native calls per example (64); the caller's
+request budget may be lower.
 
 Save with `artifact.save(path)` and restore with `load_artifact(path)` or
 `HierarchyArtifact.load(path)`. `load_artifact` explicitly dispatches between
@@ -49,7 +50,9 @@ graphs. Shared recovery controls, compilation, evaluation, and the study runner
 are implemented; see [release verification](HIERARCHY_RELEASE_VERIFICATION.md)
 for the merged pull requests and the one criterion that stays open.
 
-Export the source and artifact JSON schemas with `s1 schema --out schemas`.
+Export the source and artifact JSON schemas with `typewright schema --out schemas`;
+it writes `hierarchy-source.schema.json` and `hierarchy-artifact.schema.json` next
+to the flat `usecase.schema.json` and `program.schema.json`.
 Schema generation, package import and frozen loading need only the base
 dependencies; DSPy, GEPA and the live vendor SDK remain optional compile or
 live-execution dependencies.

@@ -3,8 +3,8 @@ from pathlib import Path
 
 import pytest
 
-from s1compiler.errors import DataError
-from s1compiler.hierarchy_research_data import _read_archive, split_records, text_hash
+from typewright.errors import DataError
+from typewright.hierarchy_research_data import _read_archive, split_records, text_hash
 
 
 def pair(identity, partition="train", text=None, english=None):

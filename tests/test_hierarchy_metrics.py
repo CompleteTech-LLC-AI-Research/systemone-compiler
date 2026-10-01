@@ -6,16 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example
-from s1compiler.errors import DataError
-from s1compiler import hierarchy_metrics
-from s1compiler.hierarchy import HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_data import HierarchySplitGuard
-from s1compiler.hierarchy_metrics import (evaluate_hierarchy, paired_flat_hierarchy,
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example
+from typewright.errors import DataError
+from typewright import hierarchy_metrics
+from typewright.hierarchy import HierarchySource, lower_hierarchy
+from typewright.hierarchy_data import HierarchySplitGuard
+from typewright.hierarchy_metrics import (evaluate_hierarchy, paired_flat_hierarchy,
                                           replay_hierarchy_evaluation, report_from_hierarchy_results,
                                           HierarchyEvaluationFailure)
-from s1compiler.hierarchy_runtime import HierarchyRuntime
+from typewright.hierarchy_runtime import HierarchyRuntime
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"

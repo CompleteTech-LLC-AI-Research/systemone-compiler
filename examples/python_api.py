@@ -1,9 +1,9 @@
 """Run from the repository root after installation. No credentials or network required."""
 from pathlib import Path
-from s1compiler import UseCase, Compiler, CompileOptions, Runtime
-from s1compiler.backends import AnswerCache, ManagedBackend, MockBackend
-from s1compiler.data import read_jsonl
-from s1compiler.reporting import save_compilation
+from typewright import UseCase, Compiler, CompileOptions, Runtime
+from typewright.backends import AnswerCache, ManagedBackend, MockBackend
+from typewright.data import read_jsonl
+from typewright.reporting import save_compilation
 
 root = Path(__file__).parent / "support_triage"
 source = UseCase.load(root / "usecase.yaml")

@@ -6,11 +6,11 @@ import json
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.errors import ConfigurationError, DataError
-from s1compiler.hierarchy_study import (load_frozen, load_protocol, main, register,
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.errors import ConfigurationError, DataError
+from typewright.hierarchy_study import (load_frozen, load_protocol, main, register,
                                         report_study, select_and_freeze, test_frozen as run_frozen_test)
-import s1compiler.hierarchy_study as study
+import typewright.hierarchy_study as study
 
 
 ROOT = Path(__file__).resolve().parents[1] / "examples" / "hierarchy" / "support"
@@ -80,7 +80,7 @@ def test_registration_rejects_undersized_gepa_budget_before_protocol(tmp_path):
 @pytest.mark.parametrize("split", SPLITS)
 def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path, split):
     # This metadata is a test double; the checked-in labels remain synthetic.
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     first = json.loads(SPLITS[split].read_text(encoding="utf-8").splitlines()[0])
     message = first["state"]["message"]
     prior_state = {"text": message}  # Old study has a different public input field.
@@ -103,7 +103,7 @@ def test_live_registration_rejects_cross_schema_prior_holdout_text(tmp_path, spl
 @pytest.mark.parametrize("split", SPLITS)
 def test_live_registration_rejects_exact_prior_holdout_in_any_split(tmp_path, split):
     # Test-only exclusion metadata; the source labels remain synthetic.
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     row = json.loads(SPLITS[split].read_text(encoding="utf-8").splitlines()[0])
     attestation = {"label_origin": "independent_human_reviewed",
                    "test_independence_evidence": "test-only-review-record",
@@ -121,7 +121,7 @@ def test_live_registration_rejects_exact_prior_holdout_in_any_split(tmp_path, sp
 
 
 def test_live_registration_requires_normalized_text_exclusions(tmp_path):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     attestation = {"label_origin": "independent_human_reviewed",
                    "test_independence_evidence": "test-only-review-record",
                    "reviewer": "test-only-reviewer",
@@ -138,7 +138,7 @@ def test_live_registration_requires_normalized_text_exclusions(tmp_path):
 
 
 def test_normalized_text_fingerprints_cover_nested_declared_values():
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     found = study._normalized_text_fingerprints({
         "messages": ["  REFUND\tRequest  ", {"body": "Nested  TEXT"}],
         "count": 3, "blank": "  "})
@@ -147,7 +147,7 @@ def test_normalized_text_fingerprints_cover_nested_declared_values():
 
 def test_live_registration_redacts_both_prior_exclusion_lists(tmp_path):
     # Exercise registration only with synthetic test doubles; no provider is built.
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     attestation = {"label_origin": "independent_human_reviewed",
                    "test_independence_evidence": "test-only-review-record",
                    "reviewer": "test-only-reviewer",
@@ -291,7 +291,7 @@ def test_interrupted_graph_stage_reconciles_reserved_attempt(tmp_path, monkeypat
 
     def factory(_arm, _phase, ceiling):
         return ManagedBackend(Counting(), max_calls=ceiling)
-    from s1compiler.hierarchy_evidence import HierarchyEvidence
+    from typewright.hierarchy_evidence import HierarchyEvidence
     original = HierarchyEvidence._append
     interrupted = False
 
@@ -320,7 +320,7 @@ def test_live_test_requires_exact_review_digest_before_backend(tmp_path):
              SPLITS, protocol_path, study_id="synthetic_guard_h14")
     frozen_dir = tmp_path / "frozen"
     select_and_freeze(protocol_path, frozen_dir)
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     frozen, _ = load_frozen(frozen_dir)
     frozen["protocol"]["mode"] = "typesafe"
     with pytest.raises(ConfigurationError, match="approval"):
@@ -357,7 +357,7 @@ def test_study_cli_no_key_registration_through_offline_report(tmp_path, monkeypa
 
 def _live_test_double_protocol(tmp_path, study_id="test_only_live_manifest"):
     # Registration with synthetic test-double attestation; zero provider or teacher calls.
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     attestation = {"label_origin": "independent_human_reviewed",
                    "test_independence_evidence": "test-only-review-record",
                    "reviewer": "test-only-reviewer",
@@ -375,7 +375,7 @@ def _live_test_double_protocol(tmp_path, study_id="test_only_live_manifest"):
 
 
 def _completed_review(proposal):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     return {"format": study.LIVE_MANIFEST_REVIEW_FORMAT, "manifest_sha256": fingerprint(proposal),
             "reviewer": "test-only-independent-reviewer", "reviewed_at": "2026-09-30T00:00:00+00:00",
             "attestations": {name: {"attested": True, "evidence": "test-only record"}
@@ -383,7 +383,7 @@ def _completed_review(proposal):
 
 
 def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path, monkeypatch):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
@@ -424,7 +424,7 @@ def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path,
 
 
 def test_live_manifest_review_binds_exact_digest_and_every_attestation(tmp_path):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     protocol_path, _ = _live_test_double_protocol(tmp_path)
     proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
     manifest = tmp_path / "manifest.json"
@@ -465,8 +465,8 @@ def test_live_manifest_review_binds_exact_digest_and_every_attestation(tmp_path)
 
 
 def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(tmp_path, monkeypatch):
-    from s1compiler.backends import TypeSafeBackend
-    from s1compiler.io import fingerprint
+    from typewright.backends import TypeSafeBackend
+    from typewright.io import fingerprint
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
     monkeypatch.setenv("S1_TEACHER_API_BASE", "https://test-only.invalid/v1")
@@ -515,7 +515,7 @@ def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(
 
 
 def test_post_freeze_live_manifest_carries_reviewed_digest_and_unapproved_test(tmp_path):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     protocol_path, protocol = _live_test_double_protocol(tmp_path)
     proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
     (tmp_path / "review.json").write_text(json.dumps(_completed_review(proposal)))
@@ -600,7 +600,7 @@ class _FailingLive:
         self.requests = 0
 
     def evaluate(self, program, state):
-        from s1compiler.errors import BackendError
+        from typewright.errors import BackendError
         self.requests += 1
         raise BackendError("Test-only provider failure")
 
@@ -609,7 +609,7 @@ class _FailingLive:
 
 
 def _live_selection_setup(tmp_path, monkeypatch):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
     monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
@@ -624,7 +624,7 @@ def _live_selection_setup(tmp_path, monkeypatch):
 
 
 def test_failed_live_selection_records_accounting_and_blocks_silent_reselection(tmp_path, monkeypatch):
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     protocol_path, approvals = _live_selection_setup(tmp_path, monkeypatch)
     live = _FailingLive()
 
@@ -757,7 +757,7 @@ def test_roots_without_a_group_cluster_by_their_own_id():
 
 
 def test_holm_adjusts_the_two_primary_comparisons_monotonically():
-    from s1compiler.research_stats import holm
+    from typewright.research_stats import holm
     assert holm({"a": 0.01, "b": 0.04}) == pytest.approx({"a": 0.02, "b": 0.04})
     # The smaller raw p cannot end up with a larger adjusted p than the larger raw p.
     adjusted = holm({"a": 0.03, "b": 0.02})
@@ -866,7 +866,7 @@ def test_reconcile_cli_refuses_without_evidence(tmp_path, capsys):
 def test_live_mode_selection_freeze_and_manifest_with_explicit_offline_doubles(tmp_path, monkeypatch):
     """Exercise live-mode software gates; all data, reviews, and responses are test doubles."""
     pytest.importorskip("gepa")
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     protocol_path, approvals = _live_selection_setup(tmp_path, monkeypatch)
     dispatches, teacher_payloads = [], []

@@ -1,6 +1,6 @@
 """Reproducible BANKING77 experiment. Never imported by the frozen runtime.
 
-Run ``python -m s1compiler.banking77 --help``. Preparation is network-only;
+Run ``python -m typewright.banking77 --help``. Preparation is network-only;
 selection and testing default to an explicitly synthetic backend.
 """
 from __future__ import annotations

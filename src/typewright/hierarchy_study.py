@@ -420,14 +420,14 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
         "frozen_graph_digests": "assigned by live selection and recorded in frozen.json and "
                                 "live-manifest.json; they need a separate semantic review before test",
         "commands": {
-            "select": "s1-study select --protocol <protocol> --out <fresh directory> --allow-paid "
+            "select": "typewright-study select --protocol <protocol> --out <fresh directory> --allow-paid "
                       "--share-feedback --approved-protocol-sha256 " + fingerprint(protocol) +
                       " --reviewed-manifest <reviewed manifest>",
-            "test": "s1-study test --frozen <selection directory> --out <fresh directory> --allow-paid "
+            "test": "typewright-study test --frozen <selection directory> --out <fresh directory> --allow-paid "
                     "--semantic-review-approved --reviewed-frozen-sha256 <frozen_sha256 printed by select, after review>"},
         "review_requirements": list(LIVE_REVIEW_ATTESTATIONS),
         "review_template": {"format": LIVE_MANIFEST_REVIEW_FORMAT,
-                            "manifest_sha256": "<sha256 printed by s1-study manifest>",
+                            "manifest_sha256": "<sha256 printed by typewright-study manifest>",
                             "reviewer": "<name or role>", "reviewed_at": "<ISO 8601 timestamp>",
                             "attestations": {name: {"attested": False, "evidence": "<record or reason>"}
                                              for name in LIVE_REVIEW_ATTESTATIONS}},
@@ -502,7 +502,7 @@ def _load_reviewed_manifest(path: str | Path | None, protocol: dict[str, Any],
                             source: HierarchySource) -> dict[str, Any]:
     if path is None:
         raise ConfigurationError("Live selection requires a reviewed live manifest: run "
-                                 "s1-study manifest, complete its review, then s1-study review.")
+                                 "typewright-study manifest, complete its review, then typewright-study review.")
     reviewed = _envelope_read(Path(path))
     if (reviewed.get("format") != LIVE_MANIFEST_REVIEWED_FORMAT or
         reviewed.get("proposal") != _live_manifest_proposal(protocol, source) or
@@ -1207,7 +1207,7 @@ def protocol_source(programs: dict[str, Program | HierarchyArtifact]):
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="s1-study", description="Preregister and replay hierarchy research.")
+    parser = argparse.ArgumentParser(prog="typewright-study", description="Preregister and replay hierarchy research.")
     sub = parser.add_subparsers(dest="command", required=True)
     registration = sub.add_parser("register", help="Pin a new study without model calls.")
     registration.add_argument("--study-id", required=True)
@@ -1242,7 +1242,7 @@ def main(argv: list[str] | None = None) -> int:
     selection.add_argument("--acknowledge-prior-selection-sha256",
                            help="Digest of the selection ledger; required to select again after a prior live attempt.")
     selection.add_argument("--reviewed-manifest", type=Path,
-                           help="Reviewed live manifest from `s1-study review`; required for live studies.")
+                           help="Reviewed live manifest from `typewright-study review`; required for live studies.")
     manifest = sub.add_parser("manifest", help="Write the complete pre-spend live manifest; no calls.")
     manifest.add_argument("--protocol", type=Path, required=True)
     manifest.add_argument("--out", type=Path, required=True)
@@ -1323,11 +1323,11 @@ def main(argv: list[str] | None = None) -> int:
                               "synthetic": report["synthetic"]}))
         return 0
     except S1Error as exc:
-        print(f"s1-study: {exc}", file=sys.stderr)
+        print(f"typewright-study: {exc}", file=sys.stderr)
         return 2
     except (OSError, ValueError, TypeError) as exc:
         # Keep malformed data and local paths out of the default error stream.
-        print(f"s1-study: invalid input or local file operation ({type(exc).__name__}).", file=sys.stderr)
+        print(f"typewright-study: invalid input or local file operation ({type(exc).__name__}).", file=sys.stderr)
         return 2
 
 

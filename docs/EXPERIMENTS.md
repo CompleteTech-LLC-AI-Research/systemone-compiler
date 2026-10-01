@@ -3,6 +3,11 @@
 Started 2026-09-19. Records experiments actually executed against this package,
 with their raw outputs, and a prioritized backlog of proposed ones.
 
+Note: the project was renamed from System One Compiler (`s1compiler`) to Typewright
+(`typewright`) after most of this log was written. Quoted raw outputs (for example
+the `s1:` error prefix below) keep the names in effect when captured; current CLI
+errors are prefixed `typewright:`.
+
 **E1-E3 and the BANKING77 section used the synthetic `mock-lexical/v1` fixture
 and are not Jev measurements. E4 and E5 are real `jev-1.13.0` measurements** (48
 live requests, operator-authorized). No claim of real prompt-quality improvement
@@ -101,7 +106,7 @@ Also note the deltas are strongly non-additive: the individual changes sum to
 
 ### E4 — Frozen A/B on **real Jev**. Executed with operator authorization.
 
-`s1 evaluate --backend typesafe --allow-paid --max-calls 13 --no-cache`, twelve
+`typewright evaluate --backend typesafe --allow-paid --max-calls 13 --no-cache`, twelve
 test rows per program, no fitting. Backend `typesafe-sdk/0.7.0`,
 `synthetic: false`, model `jev-1.13.0`.
 
@@ -181,7 +186,7 @@ E5 says mock means anything.
 about, then decide whether to label more data or accept that this fixture is
 permanently a smoke test. Everything in Tier 2 is gated on this.
 
-**E10. Hardening set as a robustness benchmark.** Use `s1 harden` output as a
+**E10. Hardening set as a robustness benchmark.** Use `typewright harden` output as a
 separate perturbation eval **after human label review** — never as a training
 signal.
 

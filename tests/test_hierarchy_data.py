@@ -6,15 +6,15 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example
-from s1compiler.errors import DataError
-from s1compiler.hierarchy import HierarchySource, RootRef, StageRef, lower_hierarchy
-from s1compiler.hierarchy_data import (HierarchyExample, HierarchySplitGuard,
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example
+from typewright.errors import DataError
+from typewright.hierarchy import HierarchySource, RootRef, StageRef, lower_hierarchy
+from typewright.hierarchy_data import (HierarchyExample, HierarchySplitGuard,
                                        HierarchyTeacherInputs, IntermediateAnnotation,
                                        read_hierarchy_jsonl)
-from s1compiler.hierarchy_runtime import HierarchyRuntime
-from s1compiler.hierarchy_validation import validate_hierarchy_compile_inputs
+from typewright.hierarchy_runtime import HierarchyRuntime
+from typewright.hierarchy_validation import validate_hierarchy_compile_inputs
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"

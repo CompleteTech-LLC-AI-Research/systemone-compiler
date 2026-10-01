@@ -15,10 +15,10 @@ fi
 EXTRAS='.[dev]'
 if [[ "${1:-}" == '--full' ]]; then EXTRAS='.[all,dev]'; fi
 "$VENV_PY" -m pip install -e "$EXTRAS"
-"$VENV_PY" -m s1compiler doctor
+"$VENV_PY" -m typewright doctor
 if [[ "${1:-}" == '--full' ]]; then
-  "$VENV_PY" -m s1compiler doctor --check-optional
+  "$VENV_PY" -m typewright doctor --check-optional
 fi
 "$VENV_PY" -m pytest -q
-"$VENV_PY" -m s1compiler demo --out "runs/setup-demo-$(date +%Y%m%d-%H%M%S)-$$"
+"$VENV_PY" -m typewright demo --out "runs/setup-demo-$(date +%Y%m%d-%H%M%S)-$$"
 printf '%s\n' 'Local setup and synthetic demo complete. No live inference was run.'

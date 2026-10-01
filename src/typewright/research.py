@@ -1,6 +1,6 @@
 """Prepare, preregister, freeze and evaluate the five-task Jev research suite.
 
-Usage: python -m s1compiler.research --help
+Usage: python -m typewright.research --help
 No provider calls occur in prepare, register, report, or verify operations.
 """
 from __future__ import annotations
@@ -469,7 +469,7 @@ def plot_report(directory, result):
                      "Paired cluster bootstrap; family-adjusted intervals; fixed optimization seeds", fontsize=12)
         fig.savefig(directory / "primary-effects.svg", metadata={"Date": None})
         fig.savefig(directory / "primary-effects.pdf", metadata={"CreationDate": None, "ModDate": None})
-        fig.savefig(directory / "primary-effects.png", dpi=150, metadata={"Software": "systemone-compiler research suite"})
+        fig.savefig(directory / "primary-effects.png", dpi=150, metadata={"Software": "typewright research suite"})
         plt.close(fig)
 
 

@@ -5,11 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.errors import BackendError, ConfigurationError, DataError
-from s1compiler.hierarchy import HierarchySource, RootRef, lower_hierarchy
-from s1compiler.hierarchy_evidence import HierarchyEvidence, _input_references
-from s1compiler.hierarchy_runtime import GraphRetryPolicy, HierarchyRuntime
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.errors import BackendError, ConfigurationError, DataError
+from typewright.hierarchy import HierarchySource, RootRef, lower_hierarchy
+from typewright.hierarchy_evidence import HierarchyEvidence, _input_references
+from typewright.hierarchy_runtime import GraphRetryPolicy, HierarchyRuntime
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
@@ -230,7 +230,7 @@ def test_replay_rejects_wrong_state_graph_and_tampered_raw_response(tmp_path):
 
 
 def test_replay_rejects_insufficient_raw_validation_evidence_even_with_recomputed_checksums(tmp_path):
-    from s1compiler.io import canonical, fingerprint
+    from typewright.io import canonical, fingerprint
 
     state = CASES["chain.json"]["state"]
     directory = tmp_path / "evidence"
@@ -297,7 +297,7 @@ def test_exclusive_owner_rejects_duplicate_controller(tmp_path):
     initial.run(state, evidence_dir=directory)
     artifact = initial.artifact
     backend = ManagedBackend(Recording())
-    from s1compiler.io import fingerprint
+    from typewright.io import fingerprint
     from dataclasses import asdict
     with HierarchyEvidence(directory, artifact=artifact, backend=backend,
                            input_sha256=fingerprint(state), max_graph_attempts=64,
@@ -307,7 +307,7 @@ def test_exclusive_owner_rejects_duplicate_controller(tmp_path):
 
 
 def test_implementation_hash_ignores_line_endings_but_not_code(tmp_path, monkeypatch):
-    import s1compiler.hierarchy_evidence as module
+    import typewright.hierarchy_evidence as module
     source_dir = Path(module.__file__).parent
     names = ("hierarchy_evidence.py", "hierarchy_runtime.py", "hierarchy.py", "hierarchy_validation.py",
              "runtime.py", "backends.py", "models.py")
@@ -335,7 +335,7 @@ def test_implementation_hash_ignores_line_endings_but_not_code(tmp_path, monkeyp
 
 @pytest.mark.parametrize("mode", ["resume", "replay"])
 def test_oversized_event_fails_without_repair_or_dispatch(tmp_path, mode):
-    from s1compiler.hierarchy_evidence import MAX_LINE_BYTES
+    from typewright.hierarchy_evidence import MAX_LINE_BYTES
 
     state = CASES["chain.json"]["state"]
     directory = tmp_path / "oversized"
@@ -371,7 +371,7 @@ def test_resume_rejects_changed_graph_or_node_limits_before_mutation(tmp_path, l
 
 @pytest.mark.parametrize("mode", ["resume", "replay"])
 def test_event_sequence_rejected_even_with_valid_recomputed_hash_chain(tmp_path, mode):
-    from s1compiler.io import canonical, fingerprint
+    from typewright.io import canonical, fingerprint
 
     state = CASES["chain.json"]["state"]
     directory = tmp_path / "sequence"

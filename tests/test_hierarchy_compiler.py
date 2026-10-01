@@ -4,14 +4,14 @@ from pathlib import Path
 
 import pytest
 
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example
-from s1compiler.errors import ConfigurationError, DataError
-from s1compiler.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
-from s1compiler.hierarchy_data import HierarchySplitGuard
-from s1compiler.hierarchy_metrics import HierarchyEvaluationFailure, evaluate_hierarchy
-from s1compiler.hierarchy_runtime import HierarchyRuntime
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example
+from typewright.errors import ConfigurationError, DataError
+from typewright.hierarchy import HierarchyArtifact, HierarchySource, lower_hierarchy
+from typewright.hierarchy_compiler import HierarchyCompileOptions, HierarchyCompiler
+from typewright.hierarchy_data import HierarchySplitGuard
+from typewright.hierarchy_metrics import HierarchyEvaluationFailure, evaluate_hierarchy
+from typewright.hierarchy_runtime import HierarchyRuntime
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"

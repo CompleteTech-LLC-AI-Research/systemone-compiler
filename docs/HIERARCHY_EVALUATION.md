@@ -1,11 +1,15 @@
 # Hierarchy evaluation
 
-`s1compiler.hierarchy_metrics` evaluates frozen graphs against registered root
+`typewright.hierarchy_metrics` evaluates frozen graphs against registered root
 examples. Supply the same `HierarchySplitGuard` used for execution, and pass an
 explicit split. `evaluate_hierarchy` returns a report and the individual graph
-results. `replay_hierarchy_evaluation` rebuilds that report from complete durable
-evidence without provider calls. A provider, budget, or cancellation failure has
-no candidate-selection score; the caller must resolve it before comparison.
+results; an optional `evidence_root` keeps one durable evidence directory per root ID.
+`replay_hierarchy_evaluation` rebuilds that report from complete durable evidence
+under `evidence_root` without provider calls. A provider, budget, or cancellation
+failure raises `HierarchyEvaluationFailure` with no candidate-selection score; the
+caller must resolve it before comparison. `typewright evaluate ARTIFACT` dispatches
+here for a hierarchy artifact and needs all four split paths plus `--split`
+(default `test`).
 
 The fixed selection objective is the mean root utility across **all** examples.
 A completed Choice or Noul output earns 1 for an exact match and 0 otherwise.

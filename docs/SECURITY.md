@@ -10,6 +10,12 @@ to authorize sharing with a second provider; `--share-feedback` is required.
 Validation/calibration/test records are used by the native evaluator, not the
 teacher. Native evaluation still uploads those states to TypeSafe on live runs.
 
+The optional gateway examples in `examples/ai-gateway/` send the same projected
+state to additional third-party routes. They refuse to run without
+`allow_paid=True`, and each route is off unless its `AI_GATEWAY_ROUTE_N_ENABLED`
+setting is `true`. Enable a route only with separate recorded approval; consent to
+TypeSafe covers none of them.
+
 Top-level projection is an allowlist, not PII detection. Nested objects and arrays
 are sent as declared. Scrub secrets and sensitive content before labeling/loading
 the dataset. Do not test on another party's private data without authorization.

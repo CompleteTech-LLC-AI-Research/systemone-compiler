@@ -3,7 +3,7 @@
 ## Design invariants
 
 - This is a compiler/runtime library. DSPy and GEPA belong to compile time.
-  Importing `s1compiler` or running a frozen program must not import either.
+  Importing `typewright` or running a frozen program must not import either.
 - Target Jev's native typed API. Choice probabilities, Noul P(true), Score
   expectations, and vendor confidence are distinct values.
 - Keep the source contract fixed: output names/types, Choice labels, Score scale

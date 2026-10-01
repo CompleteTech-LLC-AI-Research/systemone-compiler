@@ -5,8 +5,8 @@ import copy
 import json
 from pathlib import Path
 
-from s1compiler.architect import template_program
-from s1compiler.models import Decision, StateField, UseCase
+from typewright.architect import template_program
+from typewright.models import Decision, StateField, UseCase
 
 HERE = Path(__file__).resolve().parent
 MODEL = 'jev-1.13.0'

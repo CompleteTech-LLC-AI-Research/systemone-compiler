@@ -3,7 +3,7 @@
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from s1compiler.backends import Budget
+from typewright.backends import Budget
 
 
 def bounded_retry(call, event):

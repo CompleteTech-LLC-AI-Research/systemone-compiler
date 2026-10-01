@@ -5,12 +5,12 @@ import sys
 
 import pytest
 
-from s1compiler import banking77 as bench
-from s1compiler.architect import template_program
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.data import Example, assert_disjoint, dataset_hash
-from s1compiler.errors import BackendError, CandidateError, ConfigurationError, DataError
-from s1compiler.io import atomic_json, fingerprint, load_document
+from typewright import banking77 as bench
+from typewright.architect import template_program
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.data import Example, assert_disjoint, dataset_hash
+from typewright.errors import BackendError, CandidateError, ConfigurationError, DataError
+from typewright.io import atomic_json, fingerprint, load_document
 
 
 @pytest.fixture
@@ -29,7 +29,7 @@ def mock_factory(limit):
 
 
 def test_import_keeps_runtime_dependencies_lazy():
-    result = subprocess.run([sys.executable, "-c", "import sys; import s1compiler; "
+    result = subprocess.run([sys.executable, "-c", "import sys; import typewright; "
         "assert not any(x in sys.modules for x in ('dspy', 'gepa', 'typesafe_sdk'))"], capture_output=True)
     assert result.returncode == 0, result.stderr
 

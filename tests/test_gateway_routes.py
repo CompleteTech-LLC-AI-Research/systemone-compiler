@@ -8,8 +8,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "examples" / "ai-gateway"))
 import paced_routes as r  # noqa: E402
-from s1compiler.backends import ManagedBackend, Response  # noqa: E402
-from s1compiler.errors import BudgetExceeded, BackendError  # noqa: E402
+from typewright.backends import ManagedBackend, Response  # noqa: E402
+from typewright.errors import BudgetExceeded, BackendError  # noqa: E402
 
 
 def test_retry_after_numbers_dates_and_invalid_values():
@@ -240,7 +240,7 @@ def test_only_exhausted_calibration_is_deferred():
 
 
 def test_calibration_factory_uses_only_native_and_keeps_budget(tmp_path):
-    from s1compiler.backends import MockBackend
+    from typewright.backends import MockBackend
 
     launch = SimpleNamespace(
         make_backend=lambda paid, n: ManagedBackend(MockBackend(), max_calls=n, cache=None)
@@ -269,7 +269,7 @@ def test_cooldown_is_capped_so_a_hostile_retry_after_cannot_freeze_a_group():
 
 @pytest.mark.parametrize("consent", [None, False, "true", 1, 0])
 def test_paid_backends_refuse_without_explicit_boolean_consent(consent):
-    from s1compiler.errors import ConfigurationError
+    from typewright.errors import ConfigurationError
     called = []
     launch = SimpleNamespace(make_backend=lambda paid, n: called.append(paid))
     kwargs = {} if consent is None else {"allow_paid": consent}
@@ -281,7 +281,7 @@ def test_paid_backends_refuse_without_explicit_boolean_consent(consent):
 
 
 def test_consent_is_forwarded_to_the_direct_backend_not_hard_coded():
-    from s1compiler.backends import MockBackend
+    from typewright.backends import MockBackend
     received = []
 
     def make(paid, n):

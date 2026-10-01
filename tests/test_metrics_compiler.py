@@ -1,10 +1,10 @@
 import pytest
-from s1compiler.compiler import Compiler, CompileOptions
-from s1compiler.backends import ManagedBackend, MockBackend
-from s1compiler.errors import ConfigurationError, DataError
-from s1compiler.metrics import calibration_error, example_quality, report_from_results, wilson_upper
-from s1compiler.policy import fit_policies
-from s1compiler.runtime import Runtime
+from typewright.compiler import Compiler, CompileOptions
+from typewright.backends import ManagedBackend, MockBackend
+from typewright.errors import ConfigurationError, DataError
+from typewright.metrics import calibration_error, example_quality, report_from_results, wilson_upper
+from typewright.policy import fit_policies
+from typewright.runtime import Runtime
 
 
 def perfect_result(program, row):

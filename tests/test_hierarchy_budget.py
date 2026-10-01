@@ -6,10 +6,10 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from s1compiler.backends import AnswerCache, AttemptLedger, Budget, ManagedBackend, MockBackend
-from s1compiler.errors import BackendError, BudgetExceeded, ConfigurationError
-from s1compiler.hierarchy import HierarchySource, lower_hierarchy
-from s1compiler.hierarchy_runtime import GraphRetryPolicy, HierarchyRuntime
+from typewright.backends import AnswerCache, AttemptLedger, Budget, ManagedBackend, MockBackend
+from typewright.errors import BackendError, BudgetExceeded, ConfigurationError
+from typewright.hierarchy import HierarchySource, lower_hierarchy
+from typewright.hierarchy_runtime import GraphRetryPolicy, HierarchyRuntime
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
@@ -341,12 +341,12 @@ class Unauthorized(Exception):
     (ValueError("x"), False),
 ])
 def test_sdk_transient_classification(error, expected):
-    from s1compiler.backends import is_transient_sdk_error
+    from typewright.backends import is_transient_sdk_error
     assert is_transient_sdk_error(error) is expected
 
 
 def test_sdk_transient_classification_follows_the_cause_chain():
-    from s1compiler.backends import is_transient_sdk_error
+    from typewright.backends import is_transient_sdk_error
     try:
         try:
             raise SdkTimeout("inner")
@@ -421,7 +421,7 @@ def test_predicted_worst_case_includes_the_retry_policy():
 @pytest.mark.parametrize("shape", ["answer_is_string", "choice_is_list", "choice_is_dict",
                                    "answers_is_list", "answer_is_none"])
 def test_malformed_answer_shapes_fail_cleanly_and_settle_the_receipt(shape):
-    from s1compiler.backends import Response
+    from typewright.backends import Response
 
     class Malformed:
         identity = "fake-live-test/v1"

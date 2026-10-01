@@ -11,7 +11,7 @@ Download the official archive to an ignored local directory:
 
 ```powershell
 Invoke-WebRequest https://amazon-massive-nlu-dataset.s3.amazonaws.com/amazon-massive-dataset-1.0.tar.gz -OutFile runs/amazon-massive-dataset-1.0.tar.gz
-python -m s1compiler.hierarchy_research_data --archive runs/amazon-massive-dataset-1.0.tar.gz --prior-text-exclusions runs/prior-flat-test-text-exclusions.json --out runs/massive-fr-study-inputs
+python -m typewright.hierarchy_research_data --archive runs/amazon-massive-dataset-1.0.tar.gz --prior-text-exclusions runs/prior-flat-test-text-exclusions.json --out runs/massive-fr-study-inputs
 ```
 
 Use the verified prior-flat-test text exclusion export described in
@@ -28,7 +28,12 @@ No prediction or measured task quality influences this procedure.
 
 Outputs include four JSONL splits, a fixed source contract, authored hierarchy
 draft, flat baseline, source license, aggregate provenance/coverage report,
-request estimates, and an explicitly **pending** human attestation. All original
+request estimates, and an explicitly **pending** human attestation (files:
+the four `<split>.jsonl` splits, `source.json`, `flat_baseline.s1.json`,
+`authored_draft.s1.json`, `preparation.json` and `data-attestation.pending.json`
+in a new `--out` directory; the license is `DATA_LICENSE_CC_BY_4.0.txt`). That
+attestation's `label_origin` is `upstream_human_judgments_majority_positive`; live
+registration requires `independent_human_reviewed`, so it cannot be used as is. All original
 60 labels remain supported; filtering can leave rare labels absent from an
 individual split. Groups cover identities and bilingual text, not original
 speaker membership. Public-corpus pretraining contamination and semantic
@@ -51,11 +56,11 @@ produces calibrated frozen graph digests for the final live manifest; its exact
 frozen identity and semantic changes need review before held-out execution.
 Do not relabel the pending attestation or draft as approved, frozen, or measured.
 
-After registration, `s1-study manifest` writes the complete pre-spend live
+After registration, `typewright-study manifest` writes the complete pre-spend live
 manifest, including the teacher endpoint resolved from `S1_TEACHER_API_BASE`
 at that moment, with no provider calls. Complete its `review_template` with the
 rechecked quotes, the enforced cap, and the consents, then bind it with
-`s1-study review`. Live selection refuses to start unless `--reviewed-manifest`
+`typewright-study review`. Live selection refuses to start unless `--reviewed-manifest`
 matches the protocol, the current software parameters, and the same teacher
 endpoint. See [the study guide](HIERARCHY_STUDY.md) for the exact commands.
 

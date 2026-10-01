@@ -1,6 +1,6 @@
 # Preregistered flat-versus-hierarchy study
 
-`s1-study` is a separate study identity and evidence tree. It never reads or
+`typewright-study` is a separate study identity and evidence tree. It never reads or
 modifies the existing flat benchmark worker, manifest, holdout, or spending
 reservation. The shipped end-to-end check uses synthetic support-ticket labels
 and the lexical mock. Its numerical results are **not Jev performance evidence**.
@@ -10,7 +10,7 @@ and the lexical mock. Its numerical results are **not Jev performance evidence**
 From the repository root after installation, use fresh paths:
 
 ```bash
-s1-study register --study-id synthetic_support_h14 \
+typewright-study register --study-id synthetic_support_h14 \
   --source examples/hierarchy/support/source.json \
   --candidate examples/hierarchy/support/source.json \
   --flat examples/hierarchy/support/flat_baseline.s1.json \
@@ -19,9 +19,9 @@ s1-study register --study-id synthetic_support_h14 \
   --calibration examples/hierarchy/support/calibration.jsonl \
   --test examples/hierarchy/support/test.jsonl \
   --out runs/h14-protocol.json
-s1-study select --protocol runs/h14-protocol.json --out runs/h14-frozen
-s1-study test --frozen runs/h14-frozen --out runs/h14-test
-s1-study report --frozen runs/h14-frozen --execution runs/h14-test
+typewright-study select --protocol runs/h14-protocol.json --out runs/h14-frozen
+typewright-study test --frozen runs/h14-frozen --out runs/h14-test
+typewright-study report --frozen runs/h14-frozen --execution runs/h14-test
 ```
 
 If test execution stops, rerun the same `test` command with `--resume`. The
@@ -35,7 +35,7 @@ recomputes flat decisions from typed answers, and refuses incomplete evidence.
 
 The runner removes a flat in-flight marker itself when the owner budget proves no request
 was admitted (for example a failure before dispatch). After a hard crash the marker stays and
-resume refuses. If a human can show that no request was sent, `s1-study reconcile --frozen F
+resume refuses. If a human can show that no request was sent, `typewright-study reconcile --frozen F
 --execution E --root-id ID --reviewer NAME --evidence TEXT` records that unverified claim in a
 `.reconciled-N.json` file next to the row, removes the marker, and lets `test --resume` retry
 that one row. The command proves nothing. A wrong claim means one uncounted provider call, so
@@ -68,9 +68,11 @@ For a pinned public corpus with upstream human judgments and a reproducible
 four-split preparation, see [human-annotated study preparation](HIERARCHY_LIVE_PREPARATION.md).
 Its pending review record cannot authorize live registration or teacher sharing.
 
-A live registration needs a new, independently human-reviewed four-split
+A live registration (`register --mode typesafe --selected-method dspy_gepa` with a
+`--teacher-model`) needs a new, independently human-reviewed four-split
 dataset, an attested test origin, a reviewer, and two SHA256 exclusion lists in
-`--data-attestation`: `prior_test_input_sha256s` for whole projected states and
+`--data-attestation` (`label_origin` must be `independent_human_reviewed`, with
+`test_independence_evidence` and `reviewer` set): `prior_test_input_sha256s` for whole projected states and
 `prior_test_text_sha256s` for nonempty string values in prior holdout inputs.
 Set `prior_test_text_normalization` to `casefold_whitespace_v1` (Unicode
 casefold, then collapse whitespace). The software checks exact projected-input
@@ -84,7 +86,7 @@ review, and the attestation itself still needs human review.
 Generate those lists locally from the previous flat research protocol:
 
 ```bash
-python -m s1compiler.holdout_exclusions --protocol runs/previous-protocol.json \
+python -m typewright.holdout_exclusions --protocol runs/previous-protocol.json \
   --out runs/prior-holdout-exclusions
 ```
 
@@ -97,13 +99,14 @@ Combine the task lists into the two attestation arrays above, retain their
 protocol/manifest provenance, and obtain human independence review separately.
 Keep these sensitive files local: input fingerprints are not anonymization.
 It also requires fixed teacher/model settings, native and teacher call ceilings,
-per-call price caps from a verified quote, and an externally enforced billing
-cap large enough for the declared worst case. These caps are assumptions until
+per-call price caps from a verified quote (`--provider-call-price-cap-usd`,
+`--teacher-call-price-cap-usd`), and an externally enforced billing cap
+(`--external-billing-cap-usd`) large enough for the declared worst case. These caps are assumptions until
 independently verified; hashes are integrity checks, not signatures or
 anonymization.
 
 Registering a live protocol makes **zero** provider calls. So does
-`s1-study manifest --protocol <protocol> --out <manifest>`, which writes the
+`typewright-study manifest --protocol <protocol> --out <manifest>`, which writes the
 complete pre-spend live manifest: pinned Jev model, native SDK identity with
 retries disabled, teacher model, endpoint, and provider ceilings, selection method, seeds,
 calibration minimums, per-arm call ceilings, price caps and worst-case spend,
@@ -114,7 +117,7 @@ reviewer copies the template, fills in the printed manifest digest, their name
 or role, an ISO 8601 time, and evidence for every required attestation (dataset
 labels, near-duplicate and semantic independence, exclusion lists, price quote,
 externally enforced billing cap, paid selection, and train-only teacher
-sharing), then runs `s1-study review --manifest <manifest> --review <filled
+sharing), then runs `typewright-study review --manifest <manifest> --review <filled
 review> --out <reviewed manifest>`. Review binds the attestations to one exact
 manifest digest; it rejects placeholders, missing or extra items, and any other
 digest, and it authorizes nothing by itself.
@@ -141,6 +144,6 @@ study or teacher upload is authorized by this document. The checked-in synthetic
 fixture is unsuitable for a live gain claim; no independent human-labeled
 dataset, completed review, or measured result is bundled.
 
-Use `s1-study --help` and each subcommand's `--help` for the exact arguments.
+Use `typewright-study --help` and each subcommand's `--help` for the exact arguments.
 No automatic gain or production-readiness claim follows from a positive
 comparison; it requires complete independent measured evidence and review.
