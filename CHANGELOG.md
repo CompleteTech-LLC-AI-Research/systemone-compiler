@@ -2,6 +2,9 @@
 
 ## Unreleased: rename to Typewright
 
+- Frozen hierarchy artifacts are now checked for lexical scope on load: node origins must match
+  their export chain, references, `after` edges, and finals may not cross subgraph scopes (except
+  through the inputs an export passes down), and exports must have descendant nodes (#85).
 - Renamed the distribution and import package from `systemone-compiler` /
   `s1compiler` to `typewright`. The primary commands are `typewright` and
   `typewright-study`; `s1` and `s1-study` remain as deprecated aliases. The old
