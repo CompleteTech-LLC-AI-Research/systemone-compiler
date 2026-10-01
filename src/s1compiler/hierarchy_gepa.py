@@ -163,6 +163,8 @@ class HierarchyGEPAAdapter:
             self.invalid_candidates += 1
             traces = ([{"error": "invalid_typed_graph_text_candidate"} for _ in rows]
                       if capture_traces else None)
+            if capture_traces:
+                self._issued_traces.add((fingerprint(candidate), fingerprint(traces)))
             return factory(outputs=[{"error": "invalid_candidate"} for _ in rows],
                            scores=[0.0] * len(rows), trajectories=traces)
         report, results = evaluate_hierarchy(artifact, rows, self.backend, guard=guard, split=split)
@@ -207,6 +209,7 @@ class HierarchyGEPAAdapter:
                             "Generated Outputs": {"final": trace.get("final_predictions", {}),
                                                   "stage": trace.get("stage_predictions", {}).get(stage_id)},
                             "Feedback": {"root_quality": trace.get("root_quality"),
+                                         "error": trace.get("error"),
                                          "final_errors": trace.get("final_errors", []),
                                          "annotated_stage_errors": [entry for entry in
                                                                     trace.get("annotated_stage_errors", [])

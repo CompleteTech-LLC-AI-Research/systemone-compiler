@@ -117,6 +117,37 @@ def test_full_graph_scores_and_unvisited_stage_reflection_are_train_only():
         adapter.make_reflective_dataset(candidate, Batch([], [], [{"fake": "test"}]), [technical])
 
 
+def test_invalid_train_candidate_can_reflect_and_recover_without_native_dispatch():
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
+    rows = dataset()
+    valid = components_from_hierarchy(artifact)
+    key = next(iter(valid))
+    invalid = {**valid, key: "not JSON"}
+    backend = ManagedBackend(MockBackend(), max_calls=20)
+
+    class RepairTeacher:
+        def propose_components(self, candidate, feedback, components):
+            assert components == [key]
+            assert feedback[key][0]["Feedback"]["error"] == "invalid_typed_graph_text_candidate"
+            assert feedback[key][0]["Inputs"] == {}
+            return {key: valid[key]}
+
+    adapter = HierarchyGEPAAdapter(artifact, rows, backend, RepairTeacher(), batch_factory=Batch)
+    rejected = adapter.evaluate(rows["train"], invalid, capture_traces=True)
+    assert rejected.scores == [0.0] and backend.budget.used == 0
+    reflection = adapter.make_reflective_dataset(invalid, rejected, [key])
+    repaired = {**invalid, **adapter.propose_new_texts(invalid, reflection, [key])}
+    assert hierarchy_from_components(artifact, repaired) == artifact
+    forged = copy.deepcopy(rejected)
+    forged.trajectories[0]["error"] = "forged"
+    with pytest.raises(DataError, match="registered train"):
+        adapter.make_reflective_dataset(invalid, forged, [key])
+    with pytest.raises(DataError, match="train"):
+        adapter.evaluate(rows["validation"], invalid, capture_traces=True)
+    assert backend.budget.used == 0
+    backend.close()
+
+
 def test_invalid_candidate_is_rejection_but_task_and_budget_failures_propagate():
     artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
     rows = dataset()
@@ -126,8 +157,9 @@ def test_invalid_candidate_is_rejection_but_task_and_budget_failures_propagate()
     invalid = adapter.evaluate(rows["train"], {"bad": '"bad"'}, capture_traces=True)
     assert invalid.scores == [0]
     assert backend.budget.used == 0
-    with pytest.raises(DataError, match="registered train"):
-        adapter.make_reflective_dataset({"bad": '"bad"'}, invalid, [next(iter(candidate))])
+    key = next(iter(candidate))
+    reflection = adapter.make_reflective_dataset({"bad": '"bad"'}, invalid, [key])
+    assert reflection[key][0]["Feedback"]["error"] == "invalid_typed_graph_text_candidate"
 
     class Failing(MockBackend):
         def evaluate(self, program, state):
