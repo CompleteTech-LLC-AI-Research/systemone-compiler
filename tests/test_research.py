@@ -7,7 +7,7 @@ from s1compiler.architect import template_program
 from s1compiler.backends import ManagedBackend, MockBackend
 from s1compiler.banking77 import IdentityTeacher
 from s1compiler.data import Example, assert_disjoint, dataset_hash
-from s1compiler.errors import BackendError, DataError
+from s1compiler.errors import BackendError, ConfigurationError, DataError
 from s1compiler.io import atomic_json, fingerprint, load_document
 from s1compiler.runtime import Runtime
 
@@ -19,6 +19,60 @@ def np():
 
 def source_for_test(task):
     return data.source_for(task, ["joy", "anger", "neutral"] if task == "goemotions" else ["first", "second", "oos"])
+
+
+def test_prior_holdout_export_is_test_only_and_preserves_registered_inputs(datasets, tmp_path, np):
+    from s1compiler.holdout_exclusions import export
+    from s1compiler.hierarchy_study import _normalized_text_fingerprints
+    from s1compiler.models import project_state
+
+    protocol_path = tmp_path / "protocol.json"
+    research.register(datasets, protocol_path, backend="mock")
+    before = {path: path.read_bytes() for path in datasets.rglob("*") if path.is_file()}
+    result = export(protocol_path, tmp_path / "exports", data_root=datasets)
+    inputs = load_document(tmp_path / "exports/prior-test-input-exclusions.json")
+    texts = load_document(tmp_path / "exports/prior-test-text-exclusions.json")
+    assert result["test_rows"] == 60
+    assert result["tasks"] == 5
+    for task in data.TASKS:
+        source, splits, _, _ = data.load_dataset(datasets / task)
+        test_states = [project_state(source.state, row.state) for row in splits["test"]]
+        assert inputs["tasks"][task]["projected_input_sha256s"] == sorted(map(fingerprint, test_states))
+        assert texts["tasks"][task]["normalized_text_sha256s"] == sorted(set().union(
+            *(_normalized_text_fingerprints(state) for state in test_states)))
+        train_hashes = {fingerprint(project_state(source.state, row.state)) for row in splits["train"]}
+        assert not train_hashes.intersection(inputs["tasks"][task]["projected_input_sha256s"])
+    assert {path: path.read_bytes() for path in before} == before
+    assert inputs["human_independence_review_required"] is True
+    serialized = json.dumps([inputs, texts])
+    assert '"expected"' not in serialized
+    assert '"predictions"' not in serialized
+    assert '"results"' not in serialized
+    assert "boolq test passage example" not in serialized
+    with pytest.raises(ConfigurationError, match="fresh holdout exclusion"):
+        export(protocol_path, tmp_path / "exports")
+
+
+@pytest.mark.parametrize("tamper", ["protocol", "split", "registered_manifest"])
+def test_prior_holdout_export_rejects_changed_evidence_before_output(datasets, tmp_path, tamper, np):
+    from s1compiler.holdout_exclusions import export
+
+    protocol_path = tmp_path / "protocol.json"
+    research.register(datasets, protocol_path, backend="mock")
+    envelope = load_document(protocol_path)
+    if tamper == "protocol":
+        envelope["content"]["backend"] = "typesafe"
+        atomic_json(protocol_path, envelope)
+    elif tamper == "registered_manifest":
+        envelope["content"]["datasets"]["boolq"]["manifest_sha256"] = "0" * 64
+        envelope["sha256"] = fingerprint(envelope["content"])
+        atomic_json(protocol_path, envelope)
+    else:
+        path = datasets / "boolq/test.jsonl"
+        path.write_text(path.read_text().replace("example 0", "modified example 0"), encoding="utf-8")
+    with pytest.raises(DataError):
+        export(protocol_path, tmp_path / "rejected")
+    assert not (tmp_path / "rejected").exists()
 
 
 def gold_for(task, i):

@@ -80,6 +80,22 @@ group leakage. It stores list digests and counts rather than the hash lists in
 the protocol. Hashes can expose low-entropy values; keep the lists local. These
 checks do not establish semantic independence or replace human near-duplicate
 review, and the attestation itself still needs human review.
+
+Generate those lists locally from the previous flat research protocol:
+
+```bash
+python -m s1compiler.holdout_exclusions --protocol runs/previous-protocol.json \
+  --out runs/prior-holdout-exclusions
+```
+
+Use `--data-root <relocated-root>` if its dataset paths moved. The exporter
+verifies the protocol checksum, registered manifests, source, all four splits,
+and audit metadata before writing either file. It never modifies or resumes the
+previous study. Only projected test inputs enter the lists; labels, predictions,
+and results are not exported. The text file can feed the MASSIVE preparer.
+Combine the task lists into the two attestation arrays above, retain their
+protocol/manifest provenance, and obtain human independence review separately.
+Keep these sensitive files local: input fingerprints are not anonymization.
 It also requires fixed teacher/model settings, native and teacher call ceilings,
 per-call price caps from a verified quote, and an externally enforced billing
 cap large enough for the declared worst case. These caps are assumptions until
