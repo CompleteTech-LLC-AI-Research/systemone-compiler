@@ -94,3 +94,49 @@ Still not executed: any live TypeSafe or teacher request, real GEPA optimization
 remote CI, macOS/Linux/Python 3.11-3.13 runs of the renamed package, and a
 clean-environment install of the new wheel. `MANIFEST.sha256` predates the rename
 and was not regenerated.
+
+## Update, October 1, 2026: DSPy 3.4.0 compatibility (issue #90)
+
+Offline only; no keys, no provider calls, no teacher uploads. Windows 11, Python 3.14.3.
+The only socket used is a loopback test double in `tests/test_dspy_compat.py`; its output
+is a test double, not a Jev or provider result, and says nothing about quality.
+
+Resolved versions:
+
+| Environment | dspy | gepa | litellm | pydantic | typesafe-sdk |
+|---|---|---|---|---|---|
+| Worktree `.venv` | 3.3.1 | 0.1.4 | 1.103.2 | 2.13.5 | 0.7.0 |
+| Scratch `dspy[litellm]==3.4.0` | 3.4.0 | 0.1.4 | 1.103.2 | 2.13.5 | 0.7.0 |
+
+Executed (counts include the optional real-package tests; **0 skipped** in both):
+
+- DSPy 3.3.1: `python -m pytest -q` -> **582 passed, 0 failed, 0 skipped**.
+- DSPy 3.4.0: `python -m pytest -q` -> **582 passed, 0 failed, 0 skipped**
+  (3 warnings: the DSPy `BaseLM.forward()` deprecation, a pydantic ReadOnly notice).
+  `tests/test_research_teacher.py` and `tests/test_hierarchy_architect.py`: 35 passed.
+- `typewright doctor --check-optional` passed (no network) under both versions.
+- `ruff check src tests examples`, `python -m build`, `tests/check_wheel_package.py`
+  (49 files, four entry points) and the no-key demo (`optimizer=none`, zero network
+  calls) ran on the 3.3.1 worktree environment.
+
+Findings:
+
+1. Under `engine="auto"` the teacher's metered `forward` takes DSPy's native lm15 path
+   (LiteLLM is not called) and its response has no `_hidden_params`, so SDK cost
+   estimates became unknown. Under `engine="litellm"` the 3.3.1 behavior is retained.
+   `DSPyTeacher` now pins `engine="litellm"` when `dspy.LM` accepts it. The new test
+   fails with `engine="auto"` (verified) and passes with the pin.
+2. Unchanged: cache flags, `disable_history`, both call ceilings, and the
+   `S1_TEACHER_API_BASE`/`S1_TEACHER_API_KEY` overrides (the request reached the loopback
+   double with the bearer key). Consent flags were not touched.
+3. DSPy 3.4 deprecates overriding `BaseLM.forward()` and schedules removal in 3.5; the
+   teacher meter relies on that. Hence the `<3.5` bound. Follow-up: #93.
+4. `dspy` 3.4.0 requires `pydantic>=2.11.0` itself; no extra pin added, base unchanged.
+
+Decision: supported range `dspy[litellm]>=3.3.1,<3.5`, `gepa==0.1.4`. CI's
+`optional-contracts` job now has a 3.3.1/3.4.0 matrix; shipped CI config has not run remotely.
+
+Not executed: any live TypeSafe or teacher request, real GEPA optimization, DSPy 3.4.x
+patch releases above 3.4.0, `dspy[typesafe]`/`ReAnchor`/native decision types, Python
+3.11-3.13 and non-Windows runs, remote CI, `build`/wheel/demo under 3.4.0, and a re-read
+of primary documentation (the inspection date is unchanged).
