@@ -23,6 +23,11 @@ and the validated root or predecessor output before dispatch. The result's
 and stage **predictions**. It does not promote model answers to gold labels.
 Coarse generated values can repeat across distinct root examples; they remain
 attached to the original root identity rather than becoming independent rows.
+Stages mixing root and predecessor inputs have no complete static projection:
+their derived values are unknown until execution. Equal mixed projections across
+distinct registered roots are allowed under the same root-bound lineage rule;
+they are not independent observations or permission to share evaluation traces.
+Leaf programs require nonempty declared state before split projection runs.
 `HierarchyTeacherInputs(guard).routed_train_subset(...)` deduplicates only
 within the same training group and stage-input hash. It rejects evaluation
 rows instead of dropping them.
