@@ -192,6 +192,38 @@ def test_frozen_loader_runs_semantic_validation_after_checksum(tmp_path):
         load_artifact(path)
 
 
+@pytest.mark.parametrize("tamper,reason", [
+    ("depth", "nesting depth"), ("parent", "no parent subgraph export")])
+def test_rechecksummed_frozen_nesting_is_rejected(tmp_path, tamper, reason):
+    from s1compiler.io import atomic_json, fingerprint
+
+    artifact = lower_hierarchy(HierarchySource.model_validate(_nested_chain(2)))
+    data = artifact.model_dump(mode="json")
+    if tamper == "depth":
+        data["limits"]["max_depth"] = 1
+    else:
+        # Keep references valid while severing a leaf's qualified parent path.
+        for export in data["exports"]:
+            if export["id"] == "first":
+                export["id"] = "renamed"
+        for mapping in data["final"].values():
+            for candidate in mapping["candidates"]:
+                if candidate["stage"] == "first":
+                    candidate["stage"] = "renamed"
+    path = tmp_path / "tampered.s1.json"
+    atomic_json(path, {"artifact": data, "sha256": fingerprint(data)})
+    with pytest.raises(DataError, match=reason):
+        load_artifact(path)
+
+
+@pytest.mark.parametrize("depth", [1, 2, 8])
+def test_frozen_loader_accepts_exact_nesting_boundary(tmp_path, depth):
+    artifact = lower_hierarchy(HierarchySource.model_validate(_nested_chain(depth, depth)))
+    path = tmp_path / "valid.s1.json"
+    artifact.save(path)
+    assert load_artifact(path).content_hash == artifact.content_hash
+
+
 def test_optional_vendor_confidence_requires_optional_receiving_port():
     data = fixture("chain")
     data["graph"]["stages"][1]["inputs"]["urgent"] = {

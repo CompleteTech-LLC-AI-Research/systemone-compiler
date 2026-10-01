@@ -387,6 +387,15 @@ def validate_hierarchy_compile_inputs(source: HierarchySource,
 def validate_hierarchy_artifact(artifact: HierarchyArtifact) -> tuple[str, ...]:
     """Recheck a frozen graph's typed transitive edges before any model call."""
     stages = {stage.id: stage for stage in [*artifact.nodes, *artifact.exports]}
+    export_ids = {export.id for export in artifact.exports}
+    for name in stages:
+        parts = name.split("/")
+        depth = len(parts) - 1 + (name in export_ids)
+        if depth > artifact.limits.max_depth:
+            _fail("artifact", name, "frozen nesting depth limit exceeded")
+        for length in range(1, len(parts)):
+            if "/".join(parts[:length]) not in export_ids:
+                _fail("artifact", name, "qualified stage has no parent subgraph export")
     outputs = {node.id: node.program.decisions for node in artifact.nodes}
     outputs.update({export.id: export.output_contracts for export in artifact.exports})
     dependencies: dict[str, set[str]] = {}
