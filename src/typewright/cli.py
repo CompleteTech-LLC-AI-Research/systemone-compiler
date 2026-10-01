@@ -86,7 +86,7 @@ def ensure_new_output(directory: Path):
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(prog="s1", description="Declare, optimize, and run typed Jev use cases.")
+    parser = argparse.ArgumentParser(prog="typewright", description="Declare, optimize, and run typed Jev use cases.")
     parser.add_argument("--version", action="version", version="typewright 0.1.0")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Create an editable support-triage project and synthetic dataset.")
@@ -405,15 +405,15 @@ def main(argv=None):
         print("Interrupted; no completed result is claimed.", file=sys.stderr)
         return 130
     except S1Error as exc:
-        print(f"s1: {exc}", file=sys.stderr)
+        print(f"typewright: {exc}", file=sys.stderr)
         return 2
     except ValidationError as exc:
         locations = [".".join(str(part) for part in error["loc"]) for error in exc.errors()[:3]]
-        print(f"s1: invalid typed document at {', '.join(locations)}.", file=sys.stderr)
+        print(f"typewright: invalid typed document at {', '.join(locations)}.", file=sys.stderr)
         return 2
     except (ValueError, TypeError, OSError) as exc:
         # Pydantic/JSON errors may contain sensitive values. Keep default output terse.
-        print(f"s1: invalid input or local file operation ({type(exc).__name__}).", file=sys.stderr)
+        print(f"typewright: invalid input or local file operation ({type(exc).__name__}).", file=sys.stderr)
         return 2
 
 
