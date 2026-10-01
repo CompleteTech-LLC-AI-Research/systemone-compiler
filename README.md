@@ -46,6 +46,32 @@ flowchart LR
 DSPy and GEPA are used only at compile time. Importing `typewright` or running a
 frozen program does not import either of them.
 
+## Where Typewright fits
+
+DSPy 3.4 added experimental, native Jev support: a `TypeSafe` client behind the
+normal `lm=` interface, `Noul`/`Choice`/`Score` output types, and a `ReAnchor`
+optimizer. If you want Jev **inside a DSPy program**, use that. Typewright solves a
+different problem: getting a decision contract from labeled data to a **reviewed,
+budget-bounded, frozen artifact** that an application can run without DSPy.
+
+| Concern | DSPy 3.4 (experimental, per its docs and PRs) | Typewright |
+| --- | --- | --- |
+| Use Jev in a Python program | Yes: native client, async, and generative LMs mixed in one program. | Not its job. Jev only (mock and TypeSafe backends), no async. |
+| Tune decision knobs | `ReAnchor` fits Noul thresholds, Score cuts, and Choice weights. | Fits Noul thresholds and review gates. Score cuts and Choice weights are planned ([#92](https://github.com/Jev-Engineering/TypeWright/issues/92)). |
+| Search wording and structure | GEPA over instructions. Program decomposition (via generated code) is in an open upstream PR. | GEPA plus bounded structural proposals as validated JSON. No generated code. |
+| Held-out discipline | You supply the data; `ReAnchor` uses folds. | Four disjoint splits with leakage checks; test only after freeze. |
+| Review and abstention | None documented. | Fitted review gates with a minimum accepted count and an error constraint; `review_required` on every output. |
+| Spend and identity | Not described for the Jev client; accepts aliases like `jev-latest`. | Call budgets, separate paid and teacher-sharing consent, pinned versioned model, failure on identity mismatch. |
+| Shipping | A saved DSPy program needs DSPy at runtime. | A checksummed JSON program that runs without DSPy or GEPA. |
+| Multi-request graphs and studies | Not provided. | Hierarchy v1 graphs with shared budgets and replayable evidence, and a preregistered study runner. |
+
+These are complementary, not competing, and the comparison is a snapshot of
+experimental upstream features that may change. Typewright's structural search and
+hierarchies are implemented but **not yet shown to improve accuracy**; the checks
+above are about process and safety, not measured gains. Planned alignment with
+DSPy: compatibility verification ([#90](https://github.com/Jev-Engineering/TypeWright/issues/90))
+and evaluating DSPy's Jev adapter at compile time ([#91](https://github.com/Jev-Engineering/TypeWright/issues/91)).
+
 ## Quickstart
 
 Requires Python 3.11 or newer. The base install needs only Pydantic and PyYAML:
@@ -99,7 +125,7 @@ or `-Full` for optional integrations); they never run paid inference.
 | --- | --- | --- |
 | *(base)* | Pydantic, PyYAML | Declarations, demo, frozen runtime with the mock backend |
 | `live` | TypeSafe SDK 0.7.0 | Real Jev calls |
-| `optimize` | DSPy 3.3.1, GEPA 0.1.4 | Architect, structural search, wording optimization |
+| `optimize` | DSPy 3.3.1, GEPA 0.1.4 (DSPy 3.4 not yet verified, [#90](https://github.com/Jev-Engineering/TypeWright/issues/90)) | Architect, structural search, wording optimization |
 | `research` | NumPy, Matplotlib | Benchmark statistics and figures |
 | `dev` | pytest, coverage, Ruff, build | Development |
 
