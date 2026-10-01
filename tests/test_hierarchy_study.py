@@ -861,3 +861,93 @@ def test_reconcile_cli_refuses_without_evidence(tmp_path, capsys):
     assert main(["reconcile", "--frozen", str(frozen_dir), "--execution", str(execution),
                  "--root-id", item["id"], "--reviewer", "test-only", "--evidence", "x"]) == 2
     assert "already has a result" in capsys.readouterr().err
+
+
+def test_live_mode_selection_freeze_and_manifest_with_explicit_offline_doubles(tmp_path, monkeypatch):
+    """Exercise live-mode software gates; all data, reviews, and responses are test doubles."""
+    pytest.importorskip("gepa")
+    from s1compiler.io import fingerprint
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    protocol_path, approvals = _live_selection_setup(tmp_path, monkeypatch)
+    dispatches, teacher_payloads = [], []
+    test_states = [json.loads(line)["state"] for line in SPLITS["test"].read_text().splitlines()]
+
+    class ForbiddenRealProvider:
+        identity = "typesafe-sdk/0.7.0"
+
+        def __init__(self, *, allow_paid=False, timeout=60.0):
+            raise AssertionError("Real provider construction is forbidden in this offline test")
+
+    monkeypatch.setattr(study, "TypeSafeBackend", ForbiddenRealProvider)
+
+    class NativeInterfaceDouble(MockBackend):
+        # False exists solely to enter live-mode gates; these lexical responses are not Jev evidence.
+        synthetic = False
+        identity = "typesafe-sdk/0.7.0"
+
+        def evaluate(self, program, state):
+            assert state not in test_states
+            dispatches.append(program.name)
+            response = super().evaluate(program, state)
+            response.synthetic = False  # Test-only live-interface simulation, never measured evidence.
+            return response
+
+    def factory(arm, phase, ceiling):
+        assert phase == "selection"
+        return ManagedBackend(NativeInterfaceDouble(), max_calls=ceiling)
+
+    class TeacherDouble:
+        model = "test-only/model"
+
+        def propose_hierarchy(self, source, current, feedback):
+            teacher_payloads.append(feedback)
+            assert len(teacher_payloads) <= 3
+            assert source.source == current.source
+            return current
+
+        def propose_components(self, candidate, reflective_dataset, components):
+            teacher_payloads.append(reflective_dataset)
+            assert len(teacher_payloads) <= 3
+            return {name: candidate[name] for name in components}
+
+        def accounting(self):
+            return {"model": self.model, "signature_calls": len(teacher_payloads),
+                    "provider_requests_attempted": 0}
+
+    directory = tmp_path / "test-double-frozen"
+    frozen = select_and_freeze(protocol_path, directory, backend_factory=factory,
+                               teacher=TeacherDouble(), **approvals)
+    verified, artifacts = load_frozen(directory)
+    assert verified == frozen
+    assert set(artifacts) == set(study.ARMS)
+    assert frozen["status"] == "frozen_unreviewed"
+    assert frozen["test_executed"] is False
+    assert frozen["deployment_approved"] is False
+    assert teacher_payloads
+    train_ids = {json.loads(line)["id"] for line in SPLITS["train"].read_text().splitlines()}
+    assert set(teacher_payloads[0]["root_quality"]) == train_ids
+    for split in ("validation", "calibration", "test"):
+        for line in SPLITS[split].read_text().splitlines():
+            assert json.loads(line)["state"]["message"] not in json.dumps(teacher_payloads)
+    reviewed = study._envelope_read(approvals["reviewed_manifest"])
+    manifest = study._envelope_read(directory / "live-manifest.json")
+    assert manifest["frozen_sha256"] == fingerprint(frozen)
+    assert manifest["reviewed_manifest_sha256"] == fingerprint(reviewed)
+    assert manifest["frozen_artifacts"] == {
+        arm: {"content_sha256": entry["content_sha256"], "provenance_sha256": entry["provenance_sha256"]}
+        for arm, entry in frozen["arms"].items()}
+    assert manifest["semantic_review"] == frozen["review_gates"]["semantic_review"]
+    assert manifest["test_executed"] is False
+    assert manifest["approval"]["paid_test_calls"] is False
+    assert manifest["approval"]["semantic_review"] is False
+    ledger = study._envelope_read(study._selection_ledger_path(protocol_path))
+    assert len(ledger["attempts"]) == 1
+    attempt = ledger["attempts"][0]
+    assert attempt["status"] == "frozen"
+    assert sum(entry["requests_attempted"] for entry in attempt["accounting"].values()) == len(dispatches)
+    assert attempt["teacher_accounting"]["provider_requests_attempted"] == 0
+    count = len(dispatches)
+    with pytest.raises(ConfigurationError):
+        run_frozen_test(directory, tmp_path / "unapproved-test", backend_factory=factory)
+    assert len(dispatches) == count
+    assert not (tmp_path / "unapproved-test").exists()
