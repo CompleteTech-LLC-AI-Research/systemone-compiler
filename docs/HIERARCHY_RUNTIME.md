@@ -78,6 +78,9 @@ policy, and original run ID. A checksummed ledger checkpoint is synced before
 each dispatch. An append-only, checksummed event stream stores each validated
 leaf response before the graph advances, plus route/stage decisions and the
 final result. The session holds an exclusive OS file lock until it exits.
+Replay also requires permission to open the ownership lock for writing. Copy
+read-only archived evidence into a private writable directory before replay;
+the runtime never changes archive permissions or bypasses ownership locking.
 
 ```python
 result = HierarchyRuntime(artifact, backend).run(
