@@ -765,3 +765,99 @@ def test_holm_adjusts_the_two_primary_comparisons_monotonically():
     assert holm({"a": 0.9, "b": 0.8}) == pytest.approx({"a": 1.0, "b": 1.0})
     with pytest.raises(ValueError):
         holm({"a": 1.5})
+
+
+def _frozen_mock_study(tmp_path, study_id):
+    protocol_path = tmp_path / "protocol.json"
+    register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+             SPLITS, protocol_path, study_id=study_id, bootstrap_replicates=100,
+             randomization_replicates=100)
+    frozen_dir = tmp_path / "frozen"
+    select_and_freeze(protocol_path, frozen_dir)
+    return frozen_dir
+
+
+def _counting_factory():
+    return lambda _arm, _phase, ceiling: ManagedBackend(MockBackend(), max_calls=ceiling)
+
+
+class _CrashingRuntime:
+    """Stands in for Runtime on the flat arm; optionally dispatches before crashing."""
+    dispatch = False
+
+    def __init__(self, program, backend, **_kwargs):
+        self.program, self.backend = program, backend
+
+    def run(self, state):
+        if type(self).dispatch:
+            self.backend.evaluate(self.program, state)  # reserves budget, then the process "dies"
+        raise RuntimeError("simulated crash")
+
+
+def _first_flat_record(execution):
+    start = study._envelope_read(execution / "test-started.json")
+    item = next(entry for entry in start["schedule"] if entry["arm"] == "flat_authored")
+    return item, execution / "records" / "flat_authored" / f"{item['key']}.json"
+
+
+def test_flat_marker_is_removed_when_no_request_could_have_been_sent(tmp_path, monkeypatch):
+    frozen_dir = _frozen_mock_study(tmp_path, "synthetic_marker_clean")
+    execution = tmp_path / "execution"
+    _CrashingRuntime.dispatch = False
+    with monkeypatch.context() as patch:
+        patch.setattr(study, "Runtime", _CrashingRuntime)
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            run_frozen_test(frozen_dir, execution, backend_factory=_counting_factory())
+    _, record = _first_flat_record(execution)
+    assert not record.with_suffix(".started.json").exists()
+    report = run_frozen_test(frozen_dir, execution, resume=True, backend_factory=_counting_factory())
+    assert report["status"] == "synthetic" and report["reconciled_attempts"] == []
+
+
+def test_dispatched_flat_marker_blocks_resume_until_an_explicit_recorded_reconcile(tmp_path, monkeypatch):
+    frozen_dir = _frozen_mock_study(tmp_path, "synthetic_marker_reconcile")
+    execution = tmp_path / "execution"
+    _CrashingRuntime.dispatch = True
+    with monkeypatch.context() as patch:
+        patch.setattr(study, "Runtime", _CrashingRuntime)
+        with pytest.raises(RuntimeError, match="simulated crash"):
+            run_frozen_test(frozen_dir, execution, backend_factory=_counting_factory())
+    item, record = _first_flat_record(execution)
+    marker = record.with_suffix(".started.json")
+    assert marker.exists()
+    with pytest.raises(DataError, match="automatic retry is unsafe"):
+        run_frozen_test(frozen_dir, execution, resume=True, backend_factory=_counting_factory())
+
+    with pytest.raises(ConfigurationError, match="reviewer and the evidence"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"], reviewer=" ", attestation="x")
+    with pytest.raises(ConfigurationError, match="reviewer and the evidence"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"], reviewer="r", attestation="")
+    with pytest.raises(DataError, match="Unknown held-out root"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id="nope", reviewer="r", attestation="x")
+    assert marker.exists()
+
+    claim = study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"],
+                                         reviewer="test-only-reviewer",
+                                         attestation="test-only: process killed before dispatch")
+    assert claim["reviewer"] == "test-only-reviewer" and claim["sequence"] == 1
+    assert not marker.exists()
+    stored = sorted(record.parent.glob(f"{item['key']}.reconciled-*.json"))
+    assert len(stored) == 1 and study._envelope_read(stored[0])["claim"].startswith("no provider request")
+    with pytest.raises(DataError, match="no in-flight marker"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"], reviewer="r", attestation="x")
+
+    report = run_frozen_test(frozen_dir, execution, resume=True, backend_factory=_counting_factory())
+    assert report["status"] == "synthetic"
+    assert [entry["reviewer"] for entry in report["reconciled_attempts"]] == ["test-only-reviewer"]
+    with pytest.raises(DataError, match="already has a result"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"], reviewer="r", attestation="x")
+
+
+def test_reconcile_cli_refuses_without_evidence(tmp_path, capsys):
+    frozen_dir = _frozen_mock_study(tmp_path, "synthetic_marker_cli")
+    execution = tmp_path / "execution"
+    run_frozen_test(frozen_dir, execution, backend_factory=_counting_factory())
+    item, record = _first_flat_record(execution)
+    assert main(["reconcile", "--frozen", str(frozen_dir), "--execution", str(execution),
+                 "--root-id", item["id"], "--reviewer", "test-only", "--evidence", "x"]) == 2
+    assert "already has a result" in capsys.readouterr().err
