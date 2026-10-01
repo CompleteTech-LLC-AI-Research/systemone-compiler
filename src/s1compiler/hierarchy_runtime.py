@@ -203,8 +203,6 @@ class HierarchyRuntime:
                                                 values, stages, executed, path, cancel_requested,
                                                 deadline, ledger, _evidence, lineage)
             status = "review_required" if review or set(decisions) != set(self.artifact.source.decisions) else "completed"
-            if self._cancelled(cancel_requested, deadline):
-                status = "cancelled"
         except _Cancelled:
             status = "cancelled"
         except _StageFailure as exc:
@@ -238,7 +236,7 @@ class HierarchyRuntime:
                            "reported_input_tokens": None if unknown_usage else self.backend.input_tokens - before_input,
                            "reported_output_tokens": None if unknown_usage else self.backend.output_tokens - before_output,
                            "dollar_cost": None,
-                           "predicted_worst_case_leaf_calls": len(self.artifact.nodes),
+                           "predicted_worst_case_leaf_calls": self._predicted_worst_case(ledger),
                            "attempt_ledger": ledger_snapshot},
         }
         if failure is not None:
@@ -255,11 +253,17 @@ class HierarchyRuntime:
         if self._cancelled(cancel_requested, deadline):
             raise _Cancelled
 
+    def _predicted_worst_case(self, ledger: AttemptLedger) -> int:
+        """Graph demand under the retry policy and per-node limits; a smaller graph limit can still
+        block it, and actual attempts are reported separately."""
+        per_node = 1 + self.retry_policy.max_transient_retries + self.retry_policy.max_invalid_response_retries
+        return sum(min(ledger.node_limits.get(node.id, per_node), per_node) for node in self.artifact.nodes)
+
     @staticmethod
     def _transient(error: Exception) -> bool:
         current: BaseException | None = error
         while current is not None:
-            if isinstance(current, (TimeoutError, ConnectionError)):
+            if isinstance(current, (TimeoutError, ConnectionError)) or getattr(current, "transient", False) is True:
                 return True
             current = current.__cause__
         return False
@@ -273,7 +277,13 @@ class HierarchyRuntime:
             view = _NodeBackend(self.backend, ledger, node.id,
                                 lambda: self._check_cancel(cancel_requested, deadline), evidence)
             try:
-                result = Runtime(node.program, view, enforce_release=self.enforce_release).run(state)
+                try:
+                    result = Runtime(node.program, view, enforce_release=self.enforce_release).run(state)
+                except (TypeError, ValueError, KeyError, AttributeError) as malformed:
+                    if ledger.status(view.last_receipt) != "response_received":
+                        raise
+                    # A response arrived but its shape broke validation: reject it like any bad response.
+                    raise BackendError("Malformed backend response rejected.") from malformed
                 if evidence is not None:
                     evidence.append_stage(node, state, result, view.last_response)
                 return result
@@ -291,7 +301,9 @@ class HierarchyRuntime:
                         raise
                     raise BackendError(f"Transient backend failure ({type(error).__name__}); retry limit reached.") from error
                 if self.retry_policy.delay_seconds:
-                    time.sleep(self.retry_policy.delay_seconds)
+                    remaining = self.retry_policy.delay_seconds if deadline is None else max(
+                        0.0, min(self.retry_policy.delay_seconds, deadline - time.monotonic()))
+                    time.sleep(remaining)
 
     def _read(self, ref: Reference, root: dict[str, Any],
               values: dict[str, dict[str, dict[str, Any]]]) -> Any:

@@ -164,6 +164,34 @@ class AttemptLedger:
         return ledger
 
 
+_TRANSIENT_STATUS = frozenset({408, 425, 429, 500, 502, 503, 504})
+_TRANSIENT_NAMES = ("timeout", "connect", "ratelimit", "unavailable", "overloaded")
+
+
+def is_transient_sdk_error(error: BaseException) -> bool:
+    """True for timeouts, connection loss, rate limits, and 5xx-style SDK failures.
+
+    SDK exceptions rarely subclass the builtins, so also match the status code and class names.
+    Authentication, quota, validation, and unknown failures are never transient.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, (TimeoutError, ConnectionError)):
+            return True
+        status = getattr(current, "status_code", None)
+        if status is None:
+            status = getattr(getattr(current, "response", None), "status_code", None)
+        if type(status) is int and status in _TRANSIENT_STATUS:
+            return True
+        if any(any(token in cls.__name__.lower() for token in _TRANSIENT_NAMES)
+               for cls in type(current).__mro__ if cls not in (Exception, BaseException, object)):
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 class TypeSafeBackend:
     """SDK 0.7.0. No chat completions emulation; one batch of native questions."""
     identity = "typesafe-sdk/0.7.0"
@@ -190,11 +218,15 @@ class TypeSafeBackend:
                 model=program.model,
             )
         except Exception as exc:
-            raise BackendError(
+            failure = BackendError(
                 f"TypeSafe request failed ({type(exc).__name__}); check local credentials, quota, and SDK compatibility."
-            ) from exc
+            )
+            failure.transient = is_transient_sdk_error(exc)
+            raise failure from exc
         # Use documented Pydantic response serialization. Never capture raw headers.
         data = response.model_dump(mode="json")
+        if not isinstance(data, dict) or "answers" not in data or "model" not in data:
+            raise BackendError("TypeSafe response lacks answers or model; refusing it.")
         return Response(
             answers=data["answers"], model=data["model"], usage=data.get("usage") or {},
             latency_ms=(time.perf_counter() - start) * 1000,

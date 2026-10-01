@@ -312,3 +312,163 @@ def test_atomic_owner_and_graph_admission_under_concurrent_probes():
     assert len(recorder.calls) == 1
     assert backend.budget.used == ledger.snapshot()["used"] == 1
     backend.close()
+
+
+class SdkTimeout(Exception):
+    """Stands in for an SDK exception that does not subclass the builtin TimeoutError."""
+
+
+class RateLimited(Exception):
+    status_code = 429
+
+
+class Unauthorized(Exception):
+    status_code = 401
+
+
+@pytest.mark.parametrize("error,expected", [
+    (SdkTimeout("x"), True),
+    (RateLimited("x"), True),
+    (TimeoutError("x"), True),
+    (Unauthorized("x"), False),
+    (ValueError("x"), False),
+])
+def test_sdk_transient_classification(error, expected):
+    from s1compiler.backends import is_transient_sdk_error
+    assert is_transient_sdk_error(error) is expected
+
+
+def test_sdk_transient_classification_follows_the_cause_chain():
+    from s1compiler.backends import is_transient_sdk_error
+    try:
+        try:
+            raise SdkTimeout("inner")
+        except SdkTimeout as inner:
+            raise RuntimeError("wrapper") from inner
+    except RuntimeError as outer:
+        assert is_transient_sdk_error(outer) is True
+
+
+class FlakyLive(MockBackend):
+    """Live-looking backend whose first calls fail with a wrapped SDK-style error."""
+    identity = "fake-live-test/v1"
+    synthetic = False
+
+    def __init__(self, failures, transient):
+        self.failures, self.transient, self.attempts = failures, transient, 0
+
+    def evaluate(self, program, state):
+        self.attempts += 1
+        if self.attempts <= self.failures:
+            failure = BackendError("Test-only provider failure")
+            failure.transient = self.transient
+            raise failure from SdkTimeout("test-only timeout")
+        response = super().evaluate(program, state)
+        response.synthetic = False
+        return response
+
+
+def test_wrapped_sdk_transient_error_is_retried_within_the_declared_limit():
+    flaky = FlakyLive(failures=2, transient=True)
+    backend = ManagedBackend(flaky, max_calls=20)
+    policy = GraphRetryPolicy(max_transient_retries=2)
+    result = HierarchyRuntime(chain(), backend, retry_policy=policy).run({"message": "urgent outage"})
+    assert result["status"] in {"completed", "review_required"}
+    assert result["accounting"]["retries"] == 2
+    assert flaky.attempts == 2 + len(result["executed"])
+    backend.close()
+
+
+def test_non_transient_backend_error_is_never_retried():
+    flaky = FlakyLive(failures=5, transient=False)
+    backend = ManagedBackend(flaky, max_calls=20)
+    policy = GraphRetryPolicy(max_transient_retries=3)
+    result = HierarchyRuntime(chain(), backend, retry_policy=policy).run({"message": "urgent outage"})
+    assert result["status"] == "failed" and result["error"]["type"] == "BackendError"
+    assert flaky.attempts == 1
+    backend.close()
+
+
+def test_transient_retry_limit_is_enforced_for_wrapped_errors():
+    flaky = FlakyLive(failures=10, transient=True)
+    backend = ManagedBackend(flaky, max_calls=20)
+    policy = GraphRetryPolicy(max_transient_retries=1)
+    result = HierarchyRuntime(chain(), backend, retry_policy=policy).run({"message": "urgent outage"})
+    assert result["status"] == "failed"
+    assert flaky.attempts == 2
+    backend.close()
+
+
+def test_predicted_worst_case_includes_the_retry_policy():
+    artifact = chain()
+    nodes = len(artifact.nodes)
+    for policy, per_node in ((GraphRetryPolicy(), 1),
+                             (GraphRetryPolicy(max_transient_retries=2, max_invalid_response_retries=1), 4)):
+        backend = ManagedBackend(MockBackend(), max_calls=50)
+        result = HierarchyRuntime(artifact, backend, retry_policy=policy).run({"message": "urgent outage"})
+        assert result["accounting"]["predicted_worst_case_leaf_calls"] == nodes * per_node
+        assert result["accounting"]["requests_attempted"] <= nodes * per_node
+        backend.close()
+
+
+@pytest.mark.parametrize("shape", ["answer_is_string", "choice_is_list", "choice_is_dict",
+                                   "answers_is_list", "answer_is_none"])
+def test_malformed_answer_shapes_fail_cleanly_and_settle_the_receipt(shape):
+    from s1compiler.backends import Response
+
+    class Malformed:
+        identity = "fake-live-test/v1"
+        synthetic = False
+
+        def evaluate(self, program, state):
+            question = next(iter(program.questions))
+            answers = {"answer_is_string": {question: "x"},
+                       "choice_is_list": {question: {"type": "choice", "choice": ["x"]}},
+                       "choice_is_dict": {question: {"type": "choice", "choice": {"x": 1}}},
+                       "answers_is_list": ["x"],
+                       "answer_is_none": {question: None}}[shape]
+            return Response(answers=answers, model=program.model, usage={}, latency_ms=1.0)
+
+        def close(self):
+            pass
+
+    backend = ManagedBackend(Malformed(), max_calls=20)
+    result = HierarchyRuntime(chain(), backend).run({"message": "urgent outage"})
+    assert result["status"] == "failed"
+    assert result["error"]["type"] == "BackendError"
+    statuses = [receipt["status"] for receipt in result["accounting"]["attempt_ledger"]["receipts"]]
+    assert statuses and "response_received" not in statuses
+    backend.close()
+
+
+def test_completed_graph_is_not_relabelled_cancelled_by_a_late_deadline():
+    state = {"done": False}
+
+    class SetsFlagOnLastLeaf(Recording):
+        def evaluate(self, program, state_in):
+            response = super().evaluate(program, state_in)
+            if len(self.calls) == 2:
+                state["done"] = True
+            return response
+
+    backend = ManagedBackend(SetsFlagOnLastLeaf(), max_calls=20)
+    result = HierarchyRuntime(chain(), backend).run(
+        {"message": "urgent outage"}, cancel_requested=lambda: state["done"])
+    assert result["status"] in {"completed", "review_required"}
+    assert result["decisions"]
+    backend.close()
+
+
+def test_retry_delay_never_sleeps_past_the_deadline(monkeypatch):
+    slept = []
+    monkeypatch.setattr(time, "sleep", lambda seconds: slept.append(seconds))
+    flaky = FlakyLive(failures=1, transient=True)
+    backend = ManagedBackend(flaky, max_calls=20)
+    policy = GraphRetryPolicy(max_transient_retries=1, delay_seconds=10.0)
+    HierarchyRuntime(chain(), backend, retry_policy=policy).run({"message": "urgent outage"},
+                                                                 timeout_seconds=60.0)
+    HierarchyRuntime(chain(), ManagedBackend(FlakyLive(failures=1, transient=True), max_calls=20),
+                     retry_policy=policy).run({"message": "urgent outage"}, timeout_seconds=0.5)
+    assert slept and slept[0] == 10.0
+    assert slept[-1] <= 0.5
+    backend.close()

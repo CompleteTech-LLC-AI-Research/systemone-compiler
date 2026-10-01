@@ -41,10 +41,12 @@ def sum_tolerance(values) -> float:
 
 
 def normalize_answers(program: Program, response: Response) -> dict[str, dict[str, Any]]:
-    if set(response.answers) != set(program.questions):
+    if not isinstance(response.answers, dict) or set(response.answers) != set(program.questions):
         raise BackendError("Response question IDs differ from the request; refusing partial/unknown answers.")
     answers = {}
     for key, q in program.questions.items():
+        if not isinstance(response.answers[key], dict):
+            raise BackendError(f"Answer is not an object: {key}.")
         answer = dict(response.answers[key])
         if answer.get("type") != q.type:
             raise BackendError(f"Answer type mismatch: {key}.")
@@ -67,7 +69,7 @@ def normalize_answers(program: Program, response: Response) -> dict[str, dict[st
         probs = {k: v / total for k, v in probs.items()}
         if q.type == "choice":
             choice = answer.get("choice")
-            if choice not in probs or probs[choice] + 1e-6 < max(probs.values()):
+            if not isinstance(choice, str) or choice not in probs or probs[choice] + 1e-6 < max(probs.values()):
                 raise BackendError(f"Choice is inconsistent with probabilities: {key}.")
             answers[key] = {"type": "choice", "choice": choice,
                             "probabilities": probs, "confidence": confidence}
