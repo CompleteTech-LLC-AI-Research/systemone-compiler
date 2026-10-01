@@ -304,3 +304,30 @@ def test_exclusive_owner_rejects_duplicate_controller(tmp_path):
                            node_limits={}, policy=asdict(GraphRetryPolicy()), mode="replay"):
         with pytest.raises(ConfigurationError, match="live owner"):
             runtime().run(state, evidence_dir=directory, evidence_mode="replay")
+
+
+def test_implementation_hash_ignores_line_endings_but_not_code(tmp_path, monkeypatch):
+    import s1compiler.hierarchy_evidence as module
+    source_dir = Path(module.__file__).parent
+    names = ("hierarchy_evidence.py", "hierarchy_runtime.py", "hierarchy.py", "hierarchy_validation.py",
+             "runtime.py", "backends.py", "models.py")
+
+    def copy_tree(target, newline):
+        target.mkdir()
+        for name in names:
+            text = (source_dir / name).read_bytes().replace(b"\r\n", b"\n")
+            (target / name).write_bytes(text.replace(b"\n", newline))
+        return target / "hierarchy_evidence.py"
+
+    lf = copy_tree(tmp_path / "lf", b"\n")
+    crlf = copy_tree(tmp_path / "crlf", b"\r\n")
+    monkeypatch.setattr(module, "__file__", str(lf))
+    unix_hash = module.implementation_hash()
+    monkeypatch.setattr(module, "__file__", str(crlf))
+    assert module.implementation_hash() == unix_hash
+
+    edited = copy_tree(tmp_path / "edited", b"\n")
+    runtime = edited.with_name("runtime.py")
+    runtime.write_bytes(runtime.read_bytes() + b"# changed behaviour\n")
+    monkeypatch.setattr(module, "__file__", str(edited))
+    assert module.implementation_hash() != unix_hash

@@ -43,7 +43,9 @@ def implementation_hash() -> str:
     root = Path(__file__).parent
     modules = ("hierarchy_evidence.py", "hierarchy_runtime.py", "hierarchy.py",
                "hierarchy_validation.py", "runtime.py", "backends.py", "models.py")
-    return fingerprint({name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in modules})
+    # Normalize line endings so an autocrlf checkout of identical code still replays old evidence.
+    return fingerprint({name: hashlib.sha256((root / name).read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+                        for name in modules})
 
 
 def _durable_json(path: Path, value: Any) -> None:
