@@ -65,6 +65,11 @@ def test_checked_in_mock_traces_match_public_runtime(name):
             assert result["status"] == "failed"
             assert result["error"]["type"] == "BudgetExceeded"
             assert result["stages"]["second/check"]["status"] == "failed"
+            assert result["synthetic"] == trace["synthetic"]
+            assert result["status"] == trace["status"]
+            assert result["error"]["type"] == trace["error_type"]
+            assert result["path"] == trace["path"]
+            assert {key: value["status"] for key, value in result["stages"].items()} == trace["stage_status"]
             continue
         result = HierarchyRuntime(artifact, backend).run(sample_rows[trace["id"]]["state"])
         assert result["synthetic"] is True

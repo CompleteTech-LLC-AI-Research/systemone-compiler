@@ -21,17 +21,29 @@ jobs:
       - run: python -m pytest -q --cov=s1compiler
       - run: python -m s1compiler demo --out runs/ci-demo
       - run: python -m build
+      - name: Verify wheel modules, starter data, and entry points
+        run: python tests/check_wheel_package.py dist/systemone_compiler-*.whl
       - name: Verify installed wheel outside checkout without keys
         run: |
           temp_dir="$(mktemp -d)"
           python -m venv "$temp_dir/venv"
           "$temp_dir/venv/bin/python" -m pip install "$GITHUB_WORKSPACE"/dist/systemone_compiler-*.whl
+          cp -R "$GITHUB_WORKSPACE/examples/hierarchy/support" "$temp_dir/study-inputs"
           cd "$temp_dir"
+          unset PYTHONPATH
           unset TYPESAFE_API_KEY OPENAI_API_KEY S1_TEACHER_API_KEY
           "$temp_dir/venv/bin/s1" demo --out flat-demo
           "$temp_dir/venv/bin/s1" demo --starter hierarchy --out graph-demo
           "$temp_dir/venv/bin/python" -m s1compiler.hierarchy_research_data --help
           "$temp_dir/venv/bin/python" -c "import sys, s1compiler; assert not {'dspy', 'gepa', 'typesafe_sdk'} & set(sys.modules)"
+          "$temp_dir/venv/bin/s1-study" register --study-id installed_wheel_synthetic \
+            --source study-inputs/source.json --candidate study-inputs/source.json \
+            --flat study-inputs/flat_baseline.s1.json --train study-inputs/train.jsonl \
+            --validation study-inputs/validation.jsonl --calibration study-inputs/calibration.jsonl \
+            --test study-inputs/test.jsonl --out study-protocol.json
+          "$temp_dir/venv/bin/s1-study" select --protocol study-protocol.json --out study-frozen
+          "$temp_dir/venv/bin/s1-study" test --frozen study-frozen --out study-execution
+          "$temp_dir/venv/bin/s1-study" report --frozen study-frozen --execution study-execution
   optional-contracts:
     runs-on: ubuntu-latest
     steps:
