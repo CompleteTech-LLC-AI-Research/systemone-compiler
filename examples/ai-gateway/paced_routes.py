@@ -12,7 +12,7 @@ from email.utils import parsedate_to_datetime
 import httpx
 from dotenv import dotenv_values
 from s1compiler.backends import ManagedBackend, Response
-from s1compiler.errors import BackendError
+from s1compiler.errors import BackendError, ConfigurationError
 from s1compiler.io import atomic_json
 
 from parallel_backend import RoutedParallel
@@ -374,8 +374,8 @@ def configurations(settings):
         raise BackendError("Pollinations is not approved: preflight returned HTTP 403.")
     configs = {"direct": {"concurrency": 8, "interval": 0.05, "group": "direct"}}
     for i in (1, 2, 3, 4, 5):
-        if i > 2 and settings.get(f"AI_GATEWAY_ROUTE_{i}_ENABLED") != "true":
-            continue
+        if settings.get(f"AI_GATEWAY_ROUTE_{i}_ENABLED") != "true":
+            continue  # every paid route, 1 and 2 included, is opt-in
         name = f"gateway-{i}" if i < 3 else {3: "beatapi", 4: "opencode-zen", 5: "classifier"}[i]
         interval = float(settings.get(f"AI_GATEWAY_ROUTE_{i}_MIN_INTERVAL_SECONDS", ".1" if i < 3 else "60"))
         if not math.isfinite(interval) or interval <= 0 or (i == 3 and interval < 60):
@@ -402,15 +402,23 @@ def configurations(settings):
 _scheduler = None
 
 
-def make_backend(limit, launch):
+def _require_paid_consent(allow_paid):
+    if allow_paid is not True:
+        raise ConfigurationError(
+            "Paid gateway routes need explicit consent: pass allow_paid=True only with recorded approval.")
+
+
+def make_backend(limit, launch, *, allow_paid=False):
+    """Paced routes for the study worker. Refuses unless the caller passes allow_paid=True."""
     global _scheduler
+    _require_paid_consent(allow_paid)
     settings = dotenv_values(launch.ROOT / ".env.local")
     configs = configurations(settings)
     if _scheduler is None:
         _scheduler = Scheduler(configs, quota_path=launch.RUN / "route-question-quota.json")
     elif _scheduler.configs != configs:
         raise BackendError("Route settings changed during the study process.")
-    factories = {"direct": lambda n: launch.make_backend(True, n)}
+    factories = {"direct": lambda n: launch.make_backend(allow_paid, n)}
     for name, config in configs.items():
         if name != "direct":
             key = settings[config["key_env"]]
@@ -436,12 +444,13 @@ def calibration_budget_exhausted(exc, phase, backend):
 _calibration_scheduler = None
 
 
-def make_calibration_backend(limit, launch):
+def make_calibration_backend(limit, launch, *, allow_paid=False):
     """Keep exact calibration attempt ceilings; avoid throttled gateway routes."""
     global _calibration_scheduler
+    _require_paid_consent(allow_paid)
     configs = {"direct": {"concurrency": 8, "interval": 0.05, "group": "direct"}}
     if _calibration_scheduler is None:
         _calibration_scheduler = Scheduler(configs)
     return PacedBackend(
-        limit, launch, configs, _calibration_scheduler, {"direct": lambda n: launch.make_backend(True, n)}
+        limit, launch, configs, _calibration_scheduler, {"direct": lambda n: launch.make_backend(allow_paid, n)}
     )

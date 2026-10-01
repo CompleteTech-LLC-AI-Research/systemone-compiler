@@ -13,7 +13,7 @@ and data sharing, and verify model equivalence, before enabling live routes.
 
 ## Native study adapter
 
-`paced_routes.make_backend(limit, launch)` returns a backend with eight workers
+`paced_routes.make_backend(limit, launch, allow_paid=True)` returns a backend with eight workers
 and a shared request budget. The runner supplies `launch.ROOT`, `launch.RUN`,
 `launch.progress` (request/response counters), `launch.checkpoint(**fields)`, and
 `launch.make_backend(allow_paid, maximum)` for a cache-disabled direct backend.
@@ -51,13 +51,15 @@ be reconstructed. No raw prompt logging or response disk cache is enabled.
 Pollinations is disabled: the tested key returned 403 for `typesafe/jev-1.13`
 and 400 for `jev-1.13-free`. Enabling this unverified route fails closed.
 
-Consent boundary: these routes belong to the existing benchmark worker and take
-their paid-call approval from that worker's launcher, not from a flag in this
-module. Routes 3 to 5 (BeatAPI, OpenCode Zen, Classifier.dev) send study inputs to
-third-party endpoints and run only when their `AI_GATEWAY_ROUTE_N_ENABLED` value is
-`true`; routes 1 and 2 have no such switch. Enable a route only with separate,
-recorded approval to share those inputs, and never reuse this module for the
-hierarchy study, which has its own consent flags.
+Consent boundary: `make_backend` and `make_calibration_backend` refuse unless the
+caller passes `allow_paid=True`, which they forward to the launcher's direct
+backend. Pass it only with recorded approval for paid calls. Every gateway route,
+routes 1 and 2 included, runs only when its `AI_GATEWAY_ROUTE_N_ENABLED` value in
+`.env.local` is `true`. Routes 3 to 5 (BeatAPI, OpenCode Zen, Classifier.dev) send
+study inputs to third-party endpoints, so enable them only with separate recorded
+approval to share those inputs. Never reuse this module for the hierarchy study,
+which has its own consent flags. A launcher that called these functions without
+`allow_paid` must now pass it, and routes 1 and 2 need their enable flag set.
 
 ## Reporting
 
