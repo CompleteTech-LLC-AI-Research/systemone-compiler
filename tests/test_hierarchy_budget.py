@@ -472,3 +472,39 @@ def test_retry_delay_never_sleeps_past_the_deadline(monkeypatch):
     assert slept and slept[0] == 10.0
     assert slept[-1] <= 0.5
     backend.close()
+
+
+def test_cancellation_between_leaves_stops_cleanly_and_charges_only_dispatched_work():
+    class CancelsAfterFirst(Recording):
+        cancelled = False
+
+        def evaluate(self, program, state):
+            response = super().evaluate(program, state)
+            CancelsAfterFirst.cancelled = True  # the caller asks to stop while the first leaf is in flight
+            return response
+
+    recorder = CancelsAfterFirst()
+    backend = ManagedBackend(recorder, max_calls=20)
+    result = HierarchyRuntime(chain(), backend).run(
+        {"message": "urgent outage"}, cancel_requested=lambda: CancelsAfterFirst.cancelled)
+    assert result["status"] == "cancelled"
+    assert recorder.calls == ["signal"]
+    assert backend.budget.used == 1
+    assert result["accounting"]["requests_attempted"] == 1
+    statuses = {stage: item["status"] for stage, item in result["stages"].items()}
+    assert statuses["signal"] == "completed"
+    assert statuses["priority"] == "cancelled"
+    assert result["decisions"] == {}
+    backend.close()
+
+
+def test_cancellation_during_a_retry_does_not_dispatch_another_attempt():
+    flaky = FlakyLive(failures=3, transient=True)
+    backend = ManagedBackend(flaky, max_calls=20)
+    policy = GraphRetryPolicy(max_transient_retries=3)
+    result = HierarchyRuntime(chain(), backend, retry_policy=policy).run(
+        {"message": "urgent outage"}, cancel_requested=lambda: flaky.attempts >= 1)
+    assert result["status"] == "cancelled"
+    assert flaky.attempts == 1
+    assert backend.budget.used == 1
+    backend.close()

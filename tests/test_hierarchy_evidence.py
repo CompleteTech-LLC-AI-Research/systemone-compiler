@@ -405,3 +405,40 @@ def test_replay_rejects_torn_tail_without_truncating_completed_evidence(tmp_path
         runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode="replay")
     assert backend.calls == []
     assert path.read_bytes() == before
+
+
+def _completed_evidence(tmp_path):
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "evidence"
+    first = runtime().run(state, evidence_dir=directory)
+    assert first["status"] == "completed"
+    return state, directory, first
+
+
+def test_resume_repairs_a_torn_trailing_event_and_replay_refuses_it(tmp_path):
+    state, directory, first = _completed_evidence(tmp_path)
+    events = directory / "events.jsonl"
+    intact = events.read_bytes()
+    events.write_bytes(intact + b'{"seq":99,"prev_sha256":"')  # process died mid-append, no newline
+    with pytest.raises(DataError, match="incomplete trailing event"):
+        runtime().run(state, evidence_dir=directory, evidence_mode="replay")
+    assert events.read_bytes() != intact  # replay never repairs
+    backend = Recording()
+    resumed = runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode="resume")
+    assert resumed == first
+    assert backend.calls == []
+    assert events.read_bytes() == intact
+
+
+def test_swapped_or_dropped_events_break_the_chain(tmp_path):
+    state, directory, _ = _completed_evidence(tmp_path)
+    events = directory / "events.jsonl"
+    lines = events.read_bytes().splitlines(keepends=True)
+    assert len(lines) >= 3
+    swapped = [lines[1], lines[0], *lines[2:]]
+    events.write_bytes(b"".join(swapped))
+    with pytest.raises(DataError, match="event chain"):
+        runtime().run(state, evidence_dir=directory, evidence_mode="replay")
+    events.write_bytes(b"".join([lines[0], *lines[2:]]))  # one event removed from the middle
+    with pytest.raises(DataError, match="event chain"):
+        runtime().run(state, evidence_dir=directory, evidence_mode="replay")
