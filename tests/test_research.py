@@ -428,3 +428,50 @@ def test_real_gepa_search_accepts_each_typed_task(task, datasets, np):
     assert program.decisions == source.decisions
     assert history[0]["engine"] == "gepa"
     assert backend.budget.used <= 60
+
+
+def test_prior_holdout_export_cli_prints_only_the_message_for_a_chained_data_error(
+        tmp_path, monkeypatch, capsys):
+    import s1compiler.holdout_exclusions as module
+    secret = "test-only-secret-customer-text"
+
+    def failing(*_args, **_kwargs):
+        raise DataError("Dataset row is invalid.") from ValueError(f"input_value={secret}")
+
+    monkeypatch.setattr(module, "export", failing)
+    status = module.main(["--protocol", str(tmp_path / "p.json"), "--out", str(tmp_path / "out")])
+    captured = capsys.readouterr()
+    assert status == 2
+    assert "Dataset row is invalid." in captured.err
+    assert secret not in captured.out + captured.err
+
+    def os_failure(*_args, **_kwargs):
+        raise OSError(f"cannot open {secret}")
+
+    monkeypatch.setattr(module, "export", os_failure)
+    assert module.main(["--protocol", str(tmp_path / "p.json"), "--out", str(tmp_path / "out")]) == 2
+    assert secret not in capsys.readouterr().err
+
+
+def test_prior_holdout_export_removes_a_partial_output_so_the_run_can_be_retried(
+        datasets, tmp_path, monkeypatch, np):
+    import s1compiler.holdout_exclusions as module
+    protocol_path = tmp_path / "protocol.json"
+    research.register(datasets, protocol_path, backend="mock")
+    real = module.atomic_json
+    calls = []
+
+    def fail_on_second_write(path, value):
+        calls.append(path)
+        if len(calls) == 2:
+            raise OSError("test-only disk full")
+        return real(path, value)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "atomic_json", fail_on_second_write)
+        with pytest.raises(OSError, match="disk full"):
+            module.export(protocol_path, tmp_path / "exports", data_root=datasets)
+    assert not (tmp_path / "exports").exists()
+    result = module.export(protocol_path, tmp_path / "exports", data_root=datasets)
+    assert result["tasks"] == 5
+    assert (tmp_path / "exports/prior-test-text-exclusions.json").is_file()

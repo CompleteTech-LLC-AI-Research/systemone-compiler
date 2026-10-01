@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import shutil
+import sys
 
-from .errors import ConfigurationError, DataError
+from .errors import ConfigurationError, DataError, S1Error
 from .hierarchy_study import TEXT_NORMALIZATION, _normalized_text_fingerprints
 from .io import atomic_json, fingerprint, load_document
 from .models import project_state
@@ -59,21 +61,36 @@ def export(protocol_path: Path, out: Path, *, data_root: Path | None = None) -> 
                    "normalization": TEXT_NORMALIZATION, "tasks": texts}
     # No source directory is modified; mkdir also refuses a racing existing output.
     out.mkdir(parents=True, exist_ok=False, mode=0o700)
-    atomic_json(out / "prior-test-input-exclusions.json", input_export)
-    atomic_json(out / "prior-test-text-exclusions.json", text_export)
+    try:
+        atomic_json(out / "prior-test-input-exclusions.json", input_export)
+        atomic_json(out / "prior-test-text-exclusions.json", text_export)
+    except BaseException:
+        # Never leave a half-written sensitive directory that also blocks a clean retry.
+        shutil.rmtree(out, ignore_errors=True)
+        raise
     return {"tasks": len(inputs), "test_rows": sum(task["n"] for task in inputs.values()),
             "input_export_sha256": fingerprint(input_export), "text_export_sha256": fingerprint(text_export)}
 
 
-def main(argv=None) -> None:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--protocol", type=Path, required=True)
     parser.add_argument("--data-root", type=Path, help="Relocated verified dataset root, containing task directories.")
     parser.add_argument("--out", type=Path, required=True, help="Fresh local sensitive output directory.")
     args = parser.parse_args(argv)
-    # Print aggregate counts/digests only, never individual low-entropy hashes.
-    print(export(args.protocol, args.out, data_root=args.data_root))
+    try:
+        # Print aggregate counts/digests only, never individual low-entropy hashes.
+        print(export(args.protocol, args.out, data_root=args.data_root))
+    except S1Error as exc:
+        # The message only: a chained validation error can embed a raw dataset row.
+        print(f"holdout_exclusions: {exc}", file=sys.stderr)
+        return 2
+    except (OSError, ValueError, TypeError) as exc:
+        print(f"holdout_exclusions: invalid input or local file operation ({type(exc).__name__}).",
+              file=sys.stderr)
+        return 2
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())
