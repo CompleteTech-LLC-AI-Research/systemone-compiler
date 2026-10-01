@@ -245,3 +245,32 @@ def test_fitted_gates_do_not_depend_on_validation_or_test_labels():
     changed["test"][0].expected = {"resolution": "refund"}
     second, _ = _compile(changed_source, changed, minimum=3)
     assert first.final_review_gates == second.final_review_gates
+
+
+def test_calibration_preserves_selected_graph_datasets_and_validation_evidence():
+    source, splits = _calibrated_inputs()
+    original_splits = copy.deepcopy(splits)
+    backend = ManagedBackend(MockBackend(), max_calls=400)
+    compiler = HierarchyCompiler(backend, options=HierarchyCompileOptions(min_calibration_samples=3))
+    session = compiler.select(source, **splits)
+    selected_graph = session.candidate.model_dump(mode="json")
+    selected_splits = copy.deepcopy(session.splits)
+    validation_evidence = copy.deepcopy((session.validation_report, session.baseline_validation,
+                                         session.validation_pair, session.proposal_history))
+    calls_before = backend.budget.used
+
+    compiler.calibrate(session)
+
+    assert session.phase == "calibrated"
+    assert session.candidate.model_dump(mode="json") == selected_graph
+    assert session.splits == selected_splits
+    assert splits == original_splits
+    assert (session.validation_report, session.baseline_validation, session.validation_pair,
+            session.proposal_history) == validation_evidence
+    assert backend.budget.used - calls_before == 2 * len(splits["calibration"])
+    assert all(entry["status"] == "fitted" for entry in session.calibration_fit["resolution"].values())
+    frozen = compiler.freeze(session)
+    assert frozen.final_review_gates == session.gates
+    assert session.candidate.model_dump(mode="json") == selected_graph
+    assert session.splits == selected_splits and splits == original_splits
+    backend.close()
