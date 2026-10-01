@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from s1compiler.backends import ManagedBackend, MockBackend
 from s1compiler.data import Example
 from s1compiler.errors import DataError
-from s1compiler.hierarchy import HierarchySource, StageRef, lower_hierarchy
+from s1compiler.hierarchy import HierarchySource, RootRef, StageRef, lower_hierarchy
 from s1compiler.hierarchy_data import (HierarchyExample, HierarchySplitGuard,
                                        HierarchyTeacherInputs, IntermediateAnnotation,
                                        read_hierarchy_jsonl)
@@ -62,6 +62,44 @@ def test_static_stage_projection_duplicates_fail_before_any_provider_call():
     # The full root states differ, but the first nested leaf sees identical input.
     with pytest.raises(DataError, match="Duplicate static stage projection for first/check"):
         HierarchySplitGuard(frozen, rows)
+
+
+def test_equal_mixed_stage_projections_remain_bound_to_distinct_split_roots():
+    source = HierarchySource.load(FIXTURES / "chain.json")
+    field = source.source.state["message"].model_copy(deep=True)
+    source.source.state["tag"] = field
+    source.graph.inputs["tag"] = field.model_copy(deep=True)
+    child = source.graph.stages[1]
+    child.program.state["tag"] = field.model_copy(deep=True)
+    child.inputs["tag"] = RootRef(root="tag")
+    child.inputs["message"] = RootRef(root="tag")
+    frozen = lower_hierarchy(source)
+    rows = splits()
+    for batch in rows.values():
+        batch[0].state["tag"] = "same root-derived combination"
+    guard = HierarchySplitGuard(frozen, rows)
+    assert all((name, "priority") not in guard.static_inputs for name in NAMES)
+    backend = ManagedBackend(MockBackend())
+    results = [HierarchyRuntime(frozen, backend).run(
+        rows[name][0].state, lineage=guard.bind(frozen, name, rows[name][0])) for name in NAMES]
+    assert all(result["status"] == "completed" for result in results)
+    assert len({result["lineage"]["stage_inputs"]["priority"]["input_sha256"]
+                for result in results}) == 1
+    assert [result["lineage"]["split"] for result in results] == list(NAMES)
+    assert [result["lineage"]["root_id"] for result in results] == list(NAMES)
+    teacher = HierarchyTeacherInputs(guard)
+    assert len(teacher.traces(results[:1])) == 1
+    with pytest.raises(DataError, match="train"):
+        teacher.traces(results[1:])
+    backend.close()
+
+
+def test_empty_input_leaf_is_rejected_before_split_projection():
+    data = json.loads((FIXTURES / "chain.json").read_text(encoding="utf-8"))
+    data["graph"]["stages"][0]["program"]["state"] = {}
+    data["graph"]["stages"][0]["inputs"] = {}
+    with pytest.raises(ValidationError, match="program needs state"):
+        HierarchySource.model_validate(data)
 
 
 @pytest.mark.parametrize("fault", ["id", "projected_input", "group"])
