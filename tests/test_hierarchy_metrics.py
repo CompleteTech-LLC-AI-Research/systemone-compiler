@@ -2,12 +2,14 @@
 import copy
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from s1compiler.backends import ManagedBackend, MockBackend
 from s1compiler.data import Example
 from s1compiler.errors import DataError
+from s1compiler import hierarchy_metrics
 from s1compiler.hierarchy import HierarchySource, lower_hierarchy
 from s1compiler.hierarchy_data import HierarchySplitGuard
 from s1compiler.hierarchy_metrics import (evaluate_hierarchy, paired_flat_hierarchy,
@@ -181,3 +183,71 @@ def test_paired_flat_comparison_requires_identical_roots(tmp_path):
     assert paired["n_clusters"] == 1
     with pytest.raises(DataError, match="identical ordered roots"):
         paired_flat_hierarchy(artifact, [row], [results], [[{**flat, "id": "other"}]])
+
+
+# --- Score and weighted quality, pinned with exact values ----------------------------------------
+def _decl(kind, levels=5, tolerance=0.5, weight=1.0):
+    criteria = list(range(levels)) if kind == "score" else {"a": "", "b": ""}
+    return SimpleNamespace(type=kind, criteria=criteria, score_tolerance=tolerance, weight=weight)
+
+
+@pytest.mark.parametrize("value,gold,expected", [(2, 2, 1.0), (2, 4, 0.5), (0, 4, 0.0), (4, 0, 0.0),
+                                                 (1.0, 1.5, 0.875)])
+def test_score_quality_is_one_minus_normalized_absolute_error(value, gold, expected):
+    assert hierarchy_metrics._value_quality(_decl("score", levels=5), value, gold) == pytest.approx(expected)
+
+
+def test_score_quality_scales_with_the_declared_number_of_levels():
+    # The same one-level miss costs more on a short scale than on a long one.
+    assert hierarchy_metrics._value_quality(_decl("score", levels=3), 1, 2) == pytest.approx(0.5)
+    assert hierarchy_metrics._value_quality(_decl("score", levels=11), 1, 2) == pytest.approx(0.9)
+
+
+def test_choice_and_noul_quality_are_exact_match_only():
+    assert hierarchy_metrics._value_quality(_decl("choice"), "a", "a") == 1.0
+    assert hierarchy_metrics._value_quality(_decl("choice"), "a", "b") == 0.0
+    assert hierarchy_metrics._value_quality(_decl("noul"), True, True) == 1.0
+    assert hierarchy_metrics._value_quality(_decl("noul"), True, False) == 0.0
+
+
+def test_score_tolerance_boundary_is_inclusive_for_correctness_only():
+    declaration = _decl("score", levels=5, tolerance=0.5)
+    assert hierarchy_metrics._correct(declaration, 2.0, 2.5) is True
+    assert hierarchy_metrics._correct(declaration, 2.0, 2.5000001) is False
+    assert hierarchy_metrics._value_quality(declaration, 2.0, 2.5) == pytest.approx(0.875)  # still graded, not rounded
+
+
+def test_complete_quality_weights_each_declared_output():
+    source = SimpleNamespace(decisions={"kind": _decl("choice", weight=3.0), "level": _decl("score", levels=5, weight=1.0)})
+    row = SimpleNamespace(expected={"kind": "a", "level": 4})
+    decisions = {"kind": {"value": "a"}, "level": {"value": 2}}
+    # (3 * 1 + 1 * 0.5) / 4
+    assert hierarchy_metrics._complete_quality(source, row, decisions) == pytest.approx(0.875)
+    decisions["kind"]["value"] = "b"
+    assert hierarchy_metrics._complete_quality(source, row, decisions) == pytest.approx(0.125)
+
+
+def test_graph_objective_on_a_score_output_grades_distance_not_exact_match(tmp_path):
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "chain.json"))
+    state = CASES["chain.json"]["state"]
+    predicted = HierarchyRuntime(artifact, ManagedBackend(MockBackend())).run(state)["decisions"]["priority"]["value"]
+    levels = len(artifact.source.decisions["priority"].criteria)
+    miss = predicted + 1 if predicted + 1 <= levels - 1 else predicted - 1
+    row = Example(id="root", state=state, expected={"priority": miss}, group="cluster_a")
+    other = {part: [Example(id=part, state={key: f"{value} {part}" for key, value in state.items()},
+                            expected={"priority": miss}, group=f"cluster_{part}")]
+             for part in ("train", "calibration", "test")}
+    guard = HierarchySplitGuard(artifact, {"validation": [row], **other})
+    report, _ = evaluate_hierarchy(artifact, [row], ManagedBackend(MockBackend()), guard=guard,
+                                   split="validation", evidence_root=tmp_path)
+    assert report["objective"] == pytest.approx(1 - 1 / (levels - 1))
+    assert report["outputs"]["priority"]["probability"]["unavailable_reason"] == (
+        "score_is_numeric_not_a_public_class_probability")
+
+
+def test_labels_cannot_change_after_split_preflight(tmp_path):
+    artifact, row, guard = fixture("chain")
+    row.expected = {**row.expected, "priority": 0}
+    with pytest.raises(DataError, match="identity, split, group, state, or labels changed"):
+        evaluate_hierarchy(artifact, [row], ManagedBackend(MockBackend()), guard=guard,
+                           split="validation", evidence_root=tmp_path)
