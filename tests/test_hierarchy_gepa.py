@@ -149,11 +149,20 @@ def test_real_gepa_offline_graph_task_and_structure_then_wording():
     router = data["graph"]["stages"][0]["program"]["questions"]["department"]["criteria"]
     router["billing"], router["technical"] = router["technical"], router["billing"]
     bad = HierarchySource.model_validate(data)
-    rows = dataset()
+    cases = [("refund invoice charge", "refund"), ("software crash bug", "bug_fix"),
+             ("invoice refund payment", "refund")]
+    rows = {split: [Example(id=f"{split}_{index}",
+                           state={"message": f"{message} {split} marker {index}"},
+                           expected={"resolution": label}, group=f"group_{split}_{index}")
+                    for index, (message, label) in enumerate(cases)]
+            for split in ("train", "validation", "calibration", "test")}
 
     class Teacher(FixedTeacher):
         def propose_hierarchy(self, fixed, current, feedback):
-            assert {item["root_id"] for item in feedback["examples"]} == {"train"}
+            train_ids = {row.id for row in rows["train"]}
+            assert {item["root_id"] for item in feedback["examples"]} == train_ids
+            assert {item["root_id"] for item in feedback["traces"]} == train_ids
+            assert set(feedback["root_quality"]) == train_ids
             return good
 
         def accounting(self):
@@ -169,10 +178,14 @@ def test_real_gepa_offline_graph_task_and_structure_then_wording():
     assert session.optimization["engine"] == "gepa"
     assert session.optimization["native_stage_calls"] > 0
     assert session.optimization["metric_rows_evaluated"] > 0
+    authored, proposed = session.proposal_history[:2]
+    assert authored["validation_objective"] == 0.0
+    assert proposed["validation_objective"] == 1.0
+    assert session.validation_report["quality_by_root_id"] == {row.id: 1.0 for row in rows["validation"]}
     compiler.calibrate(session)
     artifact = compiler.freeze(session)
     report = compiler.test(session)
-    assert report["test"]["hierarchy"]["n_root"] == 1
+    assert report["test"]["hierarchy"]["n_root"] == 3
     assert artifact.content_hash == report["graph_sha256"]
     assert report["accounting"]["native_calls_this_compile"] == backend.budget.used
 
