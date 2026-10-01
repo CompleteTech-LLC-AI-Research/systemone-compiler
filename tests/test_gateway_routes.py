@@ -253,3 +253,15 @@ def test_calibration_factory_uses_only_native_and_keeps_budget(tmp_path):
     finally:
         backend.launch = None
         backend.close()
+
+
+def test_cooldown_is_capped_so_a_hostile_retry_after_cannot_freeze_a_group():
+    now = [100.0]
+    configs = {"v1": {"concurrency": 1, "interval": 0.1, "group": "vercel"},
+               "v2": {"concurrency": 1, "interval": 0.1, "group": "vercel"}}
+    s = r.Scheduler(configs, lambda: now[0])
+    assert s.take_ready() == "v1"
+    s.release("v1", 10 ** 9, True)
+    assert s.groups["vercel"] == 100.0 + r.MAX_COOLDOWN_SECONDS
+    now[0] += r.MAX_COOLDOWN_SECONDS + 1
+    assert s.take_ready() == "v2"

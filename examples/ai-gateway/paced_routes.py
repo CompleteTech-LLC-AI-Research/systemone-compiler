@@ -18,6 +18,8 @@ from s1compiler.io import atomic_json
 from parallel_backend import RoutedParallel
 
 PIN = "jev-1.13.0"
+# A hostile or buggy Retry-After must not freeze a whole route group indefinitely.
+MAX_COOLDOWN_SECONDS = 600
 
 
 def retry_after(value, now=None):
@@ -137,7 +139,8 @@ class Scheduler:
                 self.next[name] = max(self.next[name], self.clock() + c["interval"])
             if cooldown:
                 group = c["group"]
-                self.groups[group] = max(self.groups.get(group, 0), self.clock() + cooldown)
+                self.groups[group] = max(self.groups.get(group, 0),
+                                         self.clock() + min(cooldown, MAX_COOLDOWN_SECONDS))
             self.throttles[name] += int(throttled)
             self.condition.notify_all()
 
