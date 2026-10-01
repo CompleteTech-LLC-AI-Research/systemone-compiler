@@ -54,6 +54,7 @@ LIVE_REVIEW_ATTESTATIONS = (
     "teacher_train_example_sharing_approved",
 )
 REDACTED_ATTESTATION_LISTS = ("prior_test_input_sha256s", "prior_test_text_sha256s")
+SELECTION_LEDGER_FORMAT = "systemone-hierarchy-selection-ledger/v1"
 
 
 def _file_sha256(path: Path) -> str:
@@ -512,6 +513,21 @@ def _load_reviewed_manifest(path: str | Path | None, protocol: dict[str, Any],
     return reviewed
 
 
+def _selection_ledger_path(protocol_path: str | Path) -> Path:
+    path = Path(protocol_path)
+    return path.with_name(path.name + ".selection-ledger.json")
+
+
+def _read_selection_ledger(path: Path, protocol: dict[str, Any]) -> dict[str, Any]:
+    if not path.exists():
+        return {"format": SELECTION_LEDGER_FORMAT, "protocol_sha256": fingerprint(protocol), "attempts": []}
+    ledger = _envelope_read(path)
+    if (ledger.get("format") != SELECTION_LEDGER_FORMAT or
+        ledger.get("protocol_sha256") != fingerprint(protocol) or not isinstance(ledger.get("attempts"), list)):
+        raise DataError("Selection ledger differs from this protocol.")
+    return ledger
+
+
 def _study_backend(protocol: dict[str, Any], arm: str, *, phase: str,
                    allow_paid: bool, backend_factory=None) -> ManagedBackend:
     ceiling = protocol["budgets"]["by_arm"][arm][
@@ -531,6 +547,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                       allow_paid: bool = False, share_feedback: bool = False,
                       approved_protocol_sha256: str | None = None,
                       reviewed_manifest: str | Path | None = None,
+                      acknowledge_prior_selection_sha256: str | None = None,
                       backend_factory=None, teacher=None) -> dict[str, Any]:
     """Select on validation, fit on calibration, then seal all arms before test."""
     protocol = load_protocol(protocol_path)
@@ -552,6 +569,17 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
     if protocol["mode"] == "typesafe":
         # The exact reviewed parameters gate every provider or teacher construction below.
         reviewed = _load_reviewed_manifest(reviewed_manifest, protocol, source)
+    ledger_path = _selection_ledger_path(protocol_path)
+    ledger = None
+    if protocol["mode"] == "typesafe":
+        # Ceilings are per run, so earlier paid attempts must be acknowledged, never silently repeated.
+        ledger = _read_selection_ledger(ledger_path, protocol)
+        if ledger["attempts"] and acknowledge_prior_selection_sha256 != fingerprint(ledger):
+            raise ConfigurationError(
+                f"This protocol already has {len(ledger['attempts'])} live selection attempt(s), "
+                f"last status {ledger['attempts'][-1]['status']}. Review {ledger_path.name} and pass "
+                f"--acknowledge-prior-selection-sha256 {fingerprint(ledger)} to select again; the "
+                "external billing cap must cover every attempt.")
     if protocol["selected_method"] == "dspy_gepa" and teacher is None:
         if protocol["mode"] != "typesafe":
             raise ConfigurationError("Mock GEPA study needs an explicit synthetic teacher test double.")
@@ -565,6 +593,12 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
     _envelope_write(out / "selection-started.json", {
         "protocol_sha256": fingerprint(protocol), "status": "started",
         "synthetic": protocol["mode"] == "mock", "test_executed": False})
+    attempt = {"out": str(out), "status": "started",
+               "started_at": datetime.now(timezone.utc).isoformat()}
+    if ledger is not None:
+        ledger["attempts"].append(attempt)
+        _envelope_write(ledger_path, ledger)
+    spent: dict[str, Any] = {}
     arms: dict[str, Any] = {}
     current = None
     try:
@@ -589,6 +623,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                              "accounting": flat_backend.accounting(),
                              "semantic_review": {"status": "authored_contract_only"}}
         finally:
+            spent["flat_authored"] = flat_backend.accounting()
             flat_backend.close()
 
         current = "hierarchy_authored"
@@ -610,6 +645,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                              "accounting": authored_backend.accounting(),
                              "semantic_review": authored_session.semantic_review}
         finally:
+            spent["hierarchy_authored"] = authored_backend.accounting()
             authored_backend.close()
 
         current = "hierarchy_selected"
@@ -653,6 +689,7 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
                                  "predeclared_candidate_vs_authored": semantic_review_manifest(source, chosen),
                                  "compiler": selected_session.semantic_review}}
         finally:
+            spent["hierarchy_selected"] = selected_backend.accounting()
             selected_backend.close()
         frozen = {"format": "systemone-hierarchy-study-frozen/v1",
                   "status": "frozen_unreviewed", "protocol": protocol,
@@ -671,12 +708,26 @@ def select_and_freeze(protocol_path: str | Path, out: str | Path, *,
         _envelope_write(out / "frozen.json", frozen)
         if reviewed is not None:
             _envelope_write(out / "live-manifest.json", _live_manifest_after_freeze(frozen, reviewed))
+        if ledger is not None:
+            attempt.update(status="frozen", accounting=spent,
+                           teacher_accounting=teacher.accounting() if teacher else None)
+            _envelope_write(ledger_path, ledger)
         return frozen
     except BaseException as exc:
+        try:
+            teacher_accounting = teacher.accounting() if teacher is not None else None
+        except Exception:  # A test double or broken teacher must not hide the original failure.
+            teacher_accounting = None
         atomic_json(out / "selection-failure.json", {"arm": current, "exception_type": type(exc).__name__,
                                                       "completed_arms": list(arms),
+                                                      "accounting": spent,
+                                                      "teacher_accounting": teacher_accounting,
                                                       "synthetic": protocol["mode"] == "mock",
                                                       "test_executed": False})
+        if ledger is not None:
+            attempt.update(status="failed", failed_arm=current, exception_type=type(exc).__name__,
+                           accounting=spent, teacher_accounting=teacher_accounting)
+            _envelope_write(ledger_path, ledger)
         raise
 
 
@@ -1121,6 +1172,8 @@ def main(argv: list[str] | None = None) -> int:
     selection.add_argument("--allow-paid", action="store_true")
     selection.add_argument("--share-feedback", action="store_true")
     selection.add_argument("--approved-protocol-sha256")
+    selection.add_argument("--acknowledge-prior-selection-sha256",
+                           help="Digest of the selection ledger; required to select again after a prior live attempt.")
     selection.add_argument("--reviewed-manifest", type=Path,
                            help="Reviewed live manifest from `s1-study review`; required for live studies.")
     manifest = sub.add_parser("manifest", help="Write the complete pre-spend live manifest; no calls.")
@@ -1175,7 +1228,8 @@ def main(argv: list[str] | None = None) -> int:
             frozen = select_and_freeze(args.protocol, args.out, allow_paid=args.allow_paid,
                                        share_feedback=args.share_feedback,
                                        approved_protocol_sha256=args.approved_protocol_sha256,
-                                       reviewed_manifest=args.reviewed_manifest)
+                                       reviewed_manifest=args.reviewed_manifest,
+                                       acknowledge_prior_selection_sha256=args.acknowledge_prior_selection_sha256)
             print(json.dumps({"status": frozen["status"], "frozen_sha256": fingerprint(frozen),
                               "test_executed": False}))
         elif args.command == "test":

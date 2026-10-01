@@ -589,3 +589,92 @@ def test_manifest_proposal_never_records_a_credentialed_endpoint(tmp_path, monke
     with pytest.raises(ConfigurationError, match="userinfo"):
         study.propose_live_manifest(protocol_path, output)
     assert not output.exists()
+
+
+class _FailingLive:
+    """Live-looking backend whose first request fails; counts requests it received."""
+    identity = "typesafe-sdk/0.7.0"
+    synthetic = False
+
+    def __init__(self):
+        self.requests = 0
+
+    def evaluate(self, program, state):
+        from s1compiler.errors import BackendError
+        self.requests += 1
+        raise BackendError("Test-only provider failure")
+
+    def close(self):
+        pass
+
+
+def _live_selection_setup(tmp_path, monkeypatch):
+    from s1compiler.io import fingerprint
+    monkeypatch.delenv("TYPESAFE_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_KEY", raising=False)
+    monkeypatch.delenv("S1_TEACHER_API_BASE", raising=False)
+    protocol_path, protocol = _live_test_double_protocol(tmp_path)
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    (tmp_path / "review.json").write_text(json.dumps(_completed_review(proposal)))
+    reviewed = tmp_path / "reviewed.json"
+    study.review_live_manifest(tmp_path / "manifest.json", tmp_path / "review.json", reviewed)
+    approvals = {"allow_paid": True, "share_feedback": True,
+                 "approved_protocol_sha256": fingerprint(protocol), "reviewed_manifest": reviewed}
+    return protocol_path, approvals
+
+
+def test_failed_live_selection_records_accounting_and_blocks_silent_reselection(tmp_path, monkeypatch):
+    from s1compiler.io import fingerprint
+    protocol_path, approvals = _live_selection_setup(tmp_path, monkeypatch)
+    live = _FailingLive()
+
+    def factory(_arm, _phase, ceiling):
+        return ManagedBackend(live, max_calls=ceiling)
+
+    with pytest.raises(Exception, match="Test-only provider failure"):
+        select_and_freeze(protocol_path, tmp_path / "first", backend_factory=factory,
+                          teacher=object(), **approvals)
+    assert live.requests == 1
+    failure = json.loads((tmp_path / "first" / "selection-failure.json").read_text())
+    assert failure["arm"] == "flat_authored"
+    assert failure["accounting"]["flat_authored"]["requests_attempted"] == 1
+    ledger_path = study._selection_ledger_path(protocol_path)
+    ledger = study._envelope_read(ledger_path)
+    assert [attempt["status"] for attempt in ledger["attempts"]] == ["failed"]
+    assert ledger["attempts"][0]["accounting"]["flat_authored"]["requests_attempted"] == 1
+
+    # A second attempt is refused before any provider is built and no directory is created.
+    live.requests = 0
+    with pytest.raises(ConfigurationError, match="already has 1 live selection attempt"):
+        select_and_freeze(protocol_path, tmp_path / "second", backend_factory=factory,
+                          teacher=object(), **approvals)
+    with pytest.raises(ConfigurationError, match="already has 1 live selection attempt"):
+        select_and_freeze(protocol_path, tmp_path / "second", backend_factory=factory, teacher=object(),
+                          acknowledge_prior_selection_sha256="0" * 64, **approvals)
+    assert live.requests == 0 and not (tmp_path / "second").exists()
+
+    # An explicit, digest-bound acknowledgement allows it and appends to the same ledger.
+    with pytest.raises(Exception, match="Test-only provider failure"):
+        select_and_freeze(protocol_path, tmp_path / "third", backend_factory=factory, teacher=object(),
+                          acknowledge_prior_selection_sha256=fingerprint(ledger), **approvals)
+    assert live.requests == 1
+    assert len(study._envelope_read(ledger_path)["attempts"]) == 2
+
+
+def test_selection_ledger_is_bound_to_its_protocol(tmp_path, monkeypatch):
+    protocol_path, approvals = _live_selection_setup(tmp_path, monkeypatch)
+    other_path, _ = _live_test_double_protocol(tmp_path, study_id="test_only_other_protocol")
+    study._envelope_write(study._selection_ledger_path(protocol_path), {
+        "format": study.SELECTION_LEDGER_FORMAT, "protocol_sha256": "0" * 64, "attempts": []})
+    with pytest.raises(DataError, match="differs from this protocol"):
+        select_and_freeze(protocol_path, tmp_path / "out", teacher=object(), **approvals)
+    assert other_path.exists() and not (tmp_path / "out").exists()
+
+
+def test_mock_selection_needs_no_ledger_and_can_repeat(tmp_path):
+    protocol_path = tmp_path / "protocol.json"
+    register(ROOT / "source.json", ROOT / "source.json", ROOT / "flat_baseline.s1.json",
+             SPLITS, protocol_path, study_id="synthetic_repeat_h14")
+    select_and_freeze(protocol_path, tmp_path / "first")
+    select_and_freeze(protocol_path, tmp_path / "second")
+    assert not study._selection_ledger_path(protocol_path).exists()
