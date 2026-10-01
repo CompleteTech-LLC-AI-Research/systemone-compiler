@@ -920,7 +920,13 @@ def reconcile_flat_attempt(frozen_dir: str | Path, execution_dir: str | Path, *,
     by_id = {row.id: row for row in rows}
     if root_id not in by_id:
         raise DataError("Unknown held-out root ID.")
-    item = next(entry for entry in start["schedule"] if entry["arm"] == "flat_authored" and entry["id"] == root_id)
+    item = next((entry for entry in start["schedule"]
+                 if isinstance(entry, dict) and entry.get("arm") == "flat_authored" and entry.get("id") == root_id),
+                None)
+    if item is None or not re.fullmatch(r"[0-9a-f]{64}", str(item.get("key"))) or (
+        fingerprint({"arm": "flat_authored", "id": root_id}) != item["key"]
+    ):
+        raise DataError("Held-out schedule entry is missing or its record key is not the expected digest.")
     path = _record_path(execution_dir, item)
     marker = path.with_suffix(".started.json")
     identity = _record_identity(item, by_id[root_id], frozen)

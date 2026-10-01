@@ -17,4 +17,6 @@ runs/
 .s1/
 *.sqlite
 *.sqlite-*
+prior-test-*-exclusions*.json
+*.log
 SETUP_REPORT.md

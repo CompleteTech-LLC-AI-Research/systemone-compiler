@@ -52,7 +52,11 @@ and pinned model are not negotiable search parameters.
 | `hierarchy.py`, `hierarchy_validation.py`, `hierarchy_data.py` | Versioned graph models, lowering, typed references, and split lineage. |
 | `hierarchy_compiler.py`, `hierarchy_architect.py`, `hierarchy_gepa.py` | Bounded graph selection, wording optimization, calibration, and freeze. |
 | `hierarchy_runtime.py`, `hierarchy_evidence.py`, `hierarchy_metrics.py` | Serial graph execution, durable attempt replay, and root/path reporting. |
-| `hierarchy_study.py` | Separate preregistered flat-versus-graph research runner. |
+| `hierarchy_study.py` | Separate preregistered flat-versus-graph research runner, live manifest review, selection ledger, and reconcile step. |
+| `hierarchy_research_data.py`, `holdout_exclusions.py` | Public human-judged study inputs and prior-holdout exclusion export, with no provider calls. |
+| `research.py`, `research_data.py`, `research_stats.py`, `research_teacher.py` | Flat five-benchmark research suite, dataset checks, statistics, and teacher boundary. |
+| `banking77.py` | Flat Banking77 experiment runner. |
+| `resilience.py`, `errors.py` | Bounded batch recovery and the framework error types. |
 
 The hierarchy path is a sequence of native typed leaf requests, not one native
 request with a global posterior. The frozen graph owns routing and final output

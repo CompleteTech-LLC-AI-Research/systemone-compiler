@@ -28,4 +28,5 @@ records have identical ordered root IDs, groups, and gold labels. It reports
 descriptive per-seed and per-cluster deltas. Stage observations are grouped by
 root cluster; they are not independent samples. Oracle path matches, when
 supplied, remain diagnostic and never enter the measured objective. The research
-protocol and statistical inference belong to issue #20.
+protocol and statistical inference are implemented in the [study runner](HIERARCHY_STUDY.md);
+only the human review inputs for a live run remain open.
