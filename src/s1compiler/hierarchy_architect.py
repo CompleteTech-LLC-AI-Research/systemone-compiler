@@ -102,6 +102,15 @@ def semantic_review_manifest(original: HierarchySource, selected: HierarchySourc
                     routes[f"{path}/goals"] = {name: value["goal"] for name, value in
                                                 program["decisions"].items()}
                     prompts[f"{path}/questions"] = program["questions"]
+                    # Everything else that shapes a leaf's decisions needs review too: policies,
+                    # bindings (including weights), decision definitions apart from the goals
+                    # reported above, and the declared state. Provenance and the display name
+                    # are bookkeeping, not behavior.
+                    composition[f"{path}/program"] = {
+                        **{key: value for key, value in program.items()
+                           if key not in {"questions", "decisions", "provenance", "name"}},
+                        "decisions": {name: {key: item for key, item in value.items() if key != "goal"}
+                                      for name, value in program["decisions"].items()}}
     return {"format": "systemone-hierarchy-semantic-review/v1",
             "requires_human_review": True,
             "structural_validation_is_not_semantic_approval": True,
