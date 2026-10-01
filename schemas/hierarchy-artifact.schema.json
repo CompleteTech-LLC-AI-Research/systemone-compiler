@@ -1,0 +1,895 @@
+{
+  "$defs": {
+    "Binding": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "default": "question",
+          "enum": [
+            "question",
+            "weighted_mean"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "question": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Question"
+        },
+        "weights": {
+          "additionalProperties": {
+            "type": "number"
+          },
+          "title": "Weights",
+          "type": "object"
+        }
+      },
+      "title": "Binding",
+      "type": "object"
+    },
+    "Candidate": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        },
+        "decision": {
+          "title": "Decision",
+          "type": "string"
+        },
+        "label_map": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Label Map"
+        },
+        "distribution_scope": {
+          "enum": [
+            "full_contract",
+            "branch_conditional"
+          ],
+          "title": "Distribution Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "stage",
+        "decision",
+        "distribution_scope"
+      ],
+      "title": "Candidate",
+      "type": "object"
+    },
+    "Condition": {
+      "additionalProperties": false,
+      "properties": {
+        "all": {
+          "items": {
+            "$ref": "#/$defs/Predicate"
+          },
+          "minItems": 1,
+          "title": "All",
+          "type": "array"
+        }
+      },
+      "required": [
+        "all"
+      ],
+      "title": "Condition",
+      "type": "object"
+    },
+    "Decision": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "choice",
+            "noul",
+            "score"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "goal": {
+          "maxLength": 12000,
+          "minLength": 3,
+          "title": "Goal",
+          "type": "string"
+        },
+        "criteria": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criteria"
+        },
+        "weight": {
+          "default": 1.0,
+          "exclusiveMinimum": 0,
+          "title": "Weight",
+          "type": "number"
+        },
+        "score_tolerance": {
+          "default": 0.5,
+          "minimum": 0,
+          "title": "Score Tolerance",
+          "type": "number"
+        }
+      },
+      "required": [
+        "type",
+        "goal"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "FinalMapping": {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "$ref": "#/$defs/Candidate"
+          },
+          "minItems": 1,
+          "title": "Candidates",
+          "type": "array"
+        },
+        "on_missing": {
+          "const": "review_required",
+          "title": "On Missing",
+          "type": "string"
+        }
+      },
+      "required": [
+        "candidates",
+        "on_missing"
+      ],
+      "title": "FinalMapping",
+      "type": "object"
+    },
+    "FinalReviewGate": {
+      "additionalProperties": false,
+      "description": "Post-route review policy for one public output and selected origin.",
+      "properties": {
+        "min_gate": {
+          "default": 0.0,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Gate",
+          "type": "number"
+        },
+        "force_review": {
+          "default": false,
+          "title": "Force Review",
+          "type": "boolean"
+        }
+      },
+      "title": "FinalReviewGate",
+      "type": "object"
+    },
+    "HierarchyProvenance": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "default": "draft",
+          "enum": [
+            "draft",
+            "synthetic",
+            "measured"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "composition_measured": {
+          "default": false,
+          "title": "Composition Measured",
+          "type": "boolean"
+        },
+        "deployment_approved": {
+          "default": false,
+          "title": "Deployment Approved",
+          "type": "boolean"
+        },
+        "evidence": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Evidence",
+          "type": "object"
+        }
+      },
+      "title": "HierarchyProvenance",
+      "type": "object"
+    },
+    "JsonValue": {},
+    "Limits": {
+      "additionalProperties": false,
+      "properties": {
+        "max_expanded_nodes": {
+          "default": 64,
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Max Expanded Nodes",
+          "type": "integer"
+        },
+        "max_depth": {
+          "default": 8,
+          "exclusiveMinimum": 0,
+          "maximum": 8,
+          "title": "Max Depth",
+          "type": "integer"
+        },
+        "max_native_calls_per_example": {
+          "default": 64,
+          "exclusiveMinimum": 0,
+          "maximum": 64,
+          "title": "Max Native Calls Per Example",
+          "type": "integer"
+        }
+      },
+      "title": "Limits",
+      "type": "object"
+    },
+    "LoweredExport": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "input_contracts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StateField"
+          },
+          "title": "Input Contracts",
+          "type": "object"
+        },
+        "output_contracts": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Decision"
+          },
+          "title": "Output Contracts",
+          "type": "object"
+        },
+        "outputs": {
+          "additionalProperties": {
+            "$ref": "#/$defs/FinalMapping"
+          },
+          "title": "Outputs",
+          "type": "object"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RootRef"
+              },
+              {
+                "$ref": "#/$defs/StageRef"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after": {
+          "items": {
+            "type": "string"
+          },
+          "title": "After",
+          "type": "array"
+        },
+        "on_review": {
+          "default": "defer",
+          "enum": [
+            "defer",
+            "continue_marked"
+          ],
+          "title": "On Review",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "input_contracts",
+        "output_contracts",
+        "outputs",
+        "inputs"
+      ],
+      "title": "LoweredExport",
+      "type": "object"
+    },
+    "LoweredNode": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source_id": {
+          "title": "Source Id",
+          "type": "string"
+        },
+        "program": {
+          "$ref": "#/$defs/Program"
+        },
+        "inputs": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "$ref": "#/$defs/RootRef"
+              },
+              {
+                "$ref": "#/$defs/StageRef"
+              }
+            ]
+          },
+          "title": "Inputs",
+          "type": "object"
+        },
+        "when": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Condition"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "after": {
+          "items": {
+            "type": "string"
+          },
+          "title": "After",
+          "type": "array"
+        },
+        "on_review": {
+          "default": "defer",
+          "enum": [
+            "defer",
+            "continue_marked"
+          ],
+          "title": "On Review",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_id",
+        "program",
+        "inputs"
+      ],
+      "title": "LoweredNode",
+      "type": "object"
+    },
+    "Policy": {
+      "additionalProperties": false,
+      "properties": {
+        "noul_threshold": {
+          "default": 0.5,
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Noul Threshold",
+          "type": "number"
+        },
+        "min_gate": {
+          "default": 0.8,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Min Gate",
+          "type": "number"
+        },
+        "force_review": {
+          "default": false,
+          "title": "Force Review",
+          "type": "boolean"
+        }
+      },
+      "title": "Policy",
+      "type": "object"
+    },
+    "Predicate": {
+      "additionalProperties": false,
+      "properties": {
+        "ref": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RootRef"
+            },
+            {
+              "$ref": "#/$defs/StageRef"
+            }
+          ],
+          "title": "Ref"
+        },
+        "op": {
+          "enum": [
+            "eq",
+            "in",
+            "lt",
+            "lte",
+            "gt",
+            "gte"
+          ],
+          "title": "Op",
+          "type": "string"
+        },
+        "value": {
+          "$ref": "#/$defs/JsonValue"
+        }
+      },
+      "required": [
+        "ref",
+        "op",
+        "value"
+      ],
+      "title": "Predicate",
+      "type": "object"
+    },
+    "Program": {
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "const": "systemone-program/v1",
+          "default": "systemone-program/v1",
+          "title": "Format",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "state": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StateField"
+          },
+          "title": "State",
+          "type": "object"
+        },
+        "decisions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Decision"
+          },
+          "title": "Decisions",
+          "type": "object"
+        },
+        "questions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Question"
+          },
+          "title": "Questions",
+          "type": "object"
+        },
+        "bindings": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Binding"
+          },
+          "title": "Bindings",
+          "type": "object"
+        },
+        "policies": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Policy"
+          },
+          "title": "Policies",
+          "type": "object"
+        },
+        "provenance": {
+          "additionalProperties": {
+            "$ref": "#/$defs/JsonValue"
+          },
+          "title": "Provenance",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "model",
+        "state",
+        "decisions",
+        "questions",
+        "bindings",
+        "policies"
+      ],
+      "title": "Program",
+      "type": "object"
+    },
+    "Question": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "choice",
+            "noul",
+            "score"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "instructions": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "additionalProperties": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "$ref": "#/$defs/JsonValue"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Instructions"
+        },
+        "criteria": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "object"
+                  },
+                  {
+                    "items": {
+                      "$ref": "#/$defs/JsonValue"
+                    },
+                    "type": "array"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Criteria"
+        }
+      },
+      "required": [
+        "type",
+        "instructions"
+      ],
+      "title": "Question",
+      "type": "object"
+    },
+    "RootRef": {
+      "additionalProperties": false,
+      "properties": {
+        "root": {
+          "title": "Root",
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "root"
+      ],
+      "title": "RootRef",
+      "type": "object"
+    },
+    "StageRef": {
+      "additionalProperties": false,
+      "properties": {
+        "stage": {
+          "title": "Stage",
+          "type": "string"
+        },
+        "decision": {
+          "title": "Decision",
+          "type": "string"
+        },
+        "field": {
+          "enum": [
+            "value",
+            "probabilities",
+            "p_true",
+            "vendor_confidence",
+            "gate_score",
+            "review_required"
+          ],
+          "title": "Field",
+          "type": "string"
+        },
+        "default": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/JsonValue"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "stage",
+        "decision",
+        "field"
+      ],
+      "title": "StageRef",
+      "type": "object"
+    },
+    "StateField": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "default": "string",
+          "enum": [
+            "string",
+            "integer",
+            "number",
+            "boolean",
+            "array",
+            "object"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "title": "StateField",
+      "type": "object"
+    },
+    "UseCase": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "description": {
+          "default": "",
+          "title": "Description",
+          "type": "string"
+        },
+        "model": {
+          "default": "jev-1.13.0",
+          "title": "Model",
+          "type": "string"
+        },
+        "state": {
+          "additionalProperties": {
+            "$ref": "#/$defs/StateField"
+          },
+          "title": "State",
+          "type": "object"
+        },
+        "decisions": {
+          "additionalProperties": {
+            "$ref": "#/$defs/Decision"
+          },
+          "title": "Decisions",
+          "type": "object"
+        }
+      },
+      "required": [
+        "name",
+        "state",
+        "decisions"
+      ],
+      "title": "UseCase",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "systemone-hierarchy/v1",
+      "title": "Format",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/UseCase"
+    },
+    "limits": {
+      "$ref": "#/$defs/Limits"
+    },
+    "nodes": {
+      "items": {
+        "$ref": "#/$defs/LoweredNode"
+      },
+      "title": "Nodes",
+      "type": "array"
+    },
+    "exports": {
+      "items": {
+        "$ref": "#/$defs/LoweredExport"
+      },
+      "title": "Exports",
+      "type": "array"
+    },
+    "final": {
+      "additionalProperties": {
+        "$ref": "#/$defs/FinalMapping"
+      },
+      "title": "Final",
+      "type": "object"
+    },
+    "final_review_gates": {
+      "additionalProperties": {
+        "additionalProperties": {
+          "$ref": "#/$defs/FinalReviewGate"
+        },
+        "type": "object"
+      },
+      "title": "Final Review Gates",
+      "type": "object"
+    },
+    "source_to_nodes": {
+      "additionalProperties": {
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "title": "Source To Nodes",
+      "type": "object"
+    },
+    "provenance": {
+      "$ref": "#/$defs/HierarchyProvenance"
+    }
+  },
+  "required": [
+    "format",
+    "source",
+    "limits",
+    "nodes",
+    "exports",
+    "final",
+    "source_to_nodes"
+  ],
+  "title": "HierarchyArtifact",
+  "type": "object"
+}

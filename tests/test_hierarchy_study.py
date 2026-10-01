@@ -951,3 +951,19 @@ def test_live_mode_selection_freeze_and_manifest_with_explicit_offline_doubles(t
         run_frozen_test(directory, tmp_path / "unapproved-test", backend_factory=factory)
     assert len(dispatches) == count
     assert not (tmp_path / "unapproved-test").exists()
+
+
+def test_reconcile_rejects_a_tampered_schedule_key_before_building_any_path(tmp_path):
+    frozen_dir = _frozen_mock_study(tmp_path, "synthetic_marker_tamper")
+    execution = tmp_path / "execution"
+    run_frozen_test(frozen_dir, execution, backend_factory=_counting_factory())
+    item, _ = _first_flat_record(execution)
+    started_path = execution / "test-started.json"
+    started = study._envelope_read(started_path)
+    for entry in started["schedule"]:
+        if entry["arm"] == "flat_authored" and entry["id"] == item["id"]:
+            entry["key"] = "../../outside"
+    study._envelope_write(started_path, started)
+    with pytest.raises(DataError, match="record key is not the expected digest"):
+        study.reconcile_flat_attempt(frozen_dir, execution, root_id=item["id"], reviewer="r", attestation="x")
+    assert not (tmp_path / "outside").exists()

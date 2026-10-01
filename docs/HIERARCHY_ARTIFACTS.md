@@ -45,8 +45,9 @@ The composition report checksum is
 not a cryptographic proof that the evaluation was honest. The
 [static validator](HIERARCHY_VALIDATION.md) checks authored and frozen graph
 dataflow. The [native hierarchy runtime](HIERARCHY_RUNTIME.md) executes frozen
-graphs; shared recovery controls, compilation, and evaluation remain in
-issues #11–#21.
+graphs. Shared recovery controls, compilation, evaluation, and the study runner
+are implemented; see [release verification](HIERARCHY_RELEASE_VERIFICATION.md)
+for the merged pull requests and the one criterion that stays open.
 
 Export the source and artifact JSON schemas with `s1 schema --out schemas`.
 Schema generation, package import and frozen loading need only the base

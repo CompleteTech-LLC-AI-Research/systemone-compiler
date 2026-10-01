@@ -38,3 +38,19 @@ def test_optional_extras_pin_documented_integration_targets(pyproject):
     assert "typesafe-sdk==0.7.0" in extras["live"]
     assert "dspy[litellm]==3.3.1" in extras["optimize"]
     assert "gepa==0.1.4" in extras["optimize"]
+
+
+def test_checked_in_json_schemas_match_the_models():
+    import json
+    from pathlib import Path
+    from s1compiler.hierarchy import HierarchyArtifact, HierarchySource
+    from s1compiler.models import Program, UseCase
+
+    directory = Path(__file__).resolve().parents[1] / "schemas"
+    expected = {"usecase.schema.json": UseCase, "program.schema.json": Program,
+                "hierarchy-source.schema.json": HierarchySource,
+                "hierarchy-artifact.schema.json": HierarchyArtifact}
+    assert {path.name for path in directory.glob("*.json")} == set(expected)
+    for name, model in expected.items():
+        stored = json.loads((directory / name).read_text(encoding="utf-8"))
+        assert stored == model.model_json_schema(), f"{name} is stale; run `s1 schema --out schemas`"
