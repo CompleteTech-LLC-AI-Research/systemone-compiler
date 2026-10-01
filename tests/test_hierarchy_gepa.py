@@ -187,3 +187,59 @@ def test_standalone_real_gepa_fake_proposer_executes_graph(capsys):
     assert report["native_stage_calls"] == backend.budget.used
     assert report["native_stage_calls"] > 0
     assert capsys.readouterr().out == ""
+
+
+def _reflection_setup(teacher):
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
+    rows = dataset()
+    backend = ManagedBackend(MockBackend(), max_calls=20)
+    adapter = HierarchyGEPAAdapter(artifact, rows, backend, teacher, batch_factory=Batch)
+    candidate = components_from_hierarchy(artifact)
+    evaluated = adapter.evaluate(rows["train"], candidate, capture_traces=True)
+    key = next(name for name in candidate if name.startswith("graph/billing/question/")
+               and name.endswith("/instructions"))
+    reflection = adapter.make_reflective_dataset(candidate, evaluated, [key])
+    return adapter, candidate, reflection, key
+
+
+class _Proposer:
+    def __init__(self, response=None, error=None):
+        self.response, self.error = response, error
+
+    def propose_components(self, candidate, reflective_dataset, components):
+        if self.error is not None:
+            raise self.error
+        return self.response(candidate, components) if callable(self.response) else self.response
+
+
+@pytest.mark.parametrize("label,response", [
+    ("not_json_text", lambda candidate, keys: {keys[0]: "plain text, not a JSON string"}),
+    ("json_number", lambda candidate, keys: {keys[0]: "42"}),
+    ("oversized", lambda candidate, keys: {keys[0]: '"' + "x" * 24000 + '"'}),
+    ("extra_component", lambda candidate, keys: {keys[0]: candidate[keys[0]],
+                                                 "graph/other/question/x/instructions": '"new"'}),
+    ("missing_component", lambda candidate, keys: {}),
+    ("unknown_component", lambda candidate, keys: {"graph/nowhere/question/x/instructions": '"new"'}),
+    ("not_a_mapping", lambda candidate, keys: ["not", "a", "dict"]),
+    ("none", lambda candidate, keys: None),
+])
+def test_a_malformed_proposal_is_rejected_and_the_current_text_is_kept(label, response):
+    adapter, candidate, reflection, key = _reflection_setup(_Proposer(response))
+    assert adapter.invalid_candidates == 0
+    assert adapter.propose_new_texts(candidate, reflection, [key]) == {key: candidate[key]}, label
+    assert adapter.invalid_candidates == 1
+
+
+def test_a_valid_proposal_is_returned_unchanged_and_not_counted_invalid():
+    new_text = canonical("A clearer billing instruction.")
+    adapter, candidate, reflection, key = _reflection_setup(_Proposer(lambda c, keys: {keys[0]: new_text}))
+    assert adapter.propose_new_texts(candidate, reflection, [key]) == {key: new_text}
+    assert adapter.invalid_candidates == 0
+
+
+@pytest.mark.parametrize("error", [BackendError("provider unavailable"), RuntimeError("proposer crashed")])
+def test_provider_or_programming_errors_in_the_proposer_propagate(error):
+    adapter, candidate, reflection, key = _reflection_setup(_Proposer(error=error))
+    with pytest.raises(type(error), match=str(error)):
+        adapter.propose_new_texts(candidate, reflection, [key])
+    assert adapter.invalid_candidates == 0

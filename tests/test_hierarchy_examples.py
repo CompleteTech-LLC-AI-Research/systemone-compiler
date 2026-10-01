@@ -70,6 +70,7 @@ def test_checked_in_mock_traces_match_public_runtime(name):
             assert result["error"]["type"] == trace["error_type"]
             assert result["path"] == trace["path"]
             assert {key: value["status"] for key, value in result["stages"].items()} == trace["stage_status"]
+            assert limited.budget.used == 1  # the second leaf was refused before dispatch
             continue
         result = HierarchyRuntime(artifact, backend).run(sample_rows[trace["id"]]["state"])
         assert result["synthetic"] is True
