@@ -100,7 +100,12 @@ exact `--approved-protocol-sha256`, and `--reviewed-manifest`. Before any
 provider or teacher object is built, it regenerates the manifest from the
 protocol, current code, and the current teacher endpoint, and refuses to run if
 anything differs from what was reviewed, so a live run cannot change an
-unspecified parameter. It then creates
+unspecified parameter. Each live attempt, successful or not, is recorded with its per-arm and teacher
+accounting in `<protocol>.selection-ledger.json` next to the protocol, and a failed run's
+`selection-failure.json` carries the same accounting. Ceilings apply per run, so a
+second live `select` on the same protocol is refused unless it passes
+`--acknowledge-prior-selection-sha256` with the ledger digest the error prints; the
+external billing cap must cover every attempt. A successful selection then creates
 frozen graph digests and `live-manifest.json`, which records the reviewed
 manifest digest and marks the held-out test and semantic review as unapproved.
 Live held-out test requires another explicit paid approval,

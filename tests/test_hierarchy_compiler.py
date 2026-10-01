@@ -130,3 +130,24 @@ def test_changed_dataset_cannot_be_frozen_or_sent_to_test():
     session.splits["test"][0].expected["resolution"] = "general"
     with pytest.raises(DataError, match="changed"):
         compiler.freeze(session)
+
+
+def test_undersized_gepa_budget_is_rejected_before_any_native_call():
+    source, splits = inputs()
+
+    class CountingBackend(MockBackend):
+        calls = 0
+
+        def evaluate(self, program, state):
+            CountingBackend.calls += 1
+            return super().evaluate(program, state)
+
+    backend = ManagedBackend(CountingBackend(), max_calls=32)
+    options = HierarchyCompileOptions(optimizer="gepa", max_metric_calls=len(splits["validation"]) + 1,
+                                      min_calibration_samples=1)
+    compiler = HierarchyCompiler(backend, teacher=object(), options=options)
+    with pytest.raises(ConfigurationError, match="exceed initial validation"):
+        compiler.select(source, **splits)
+    assert CountingBackend.calls == 0
+    assert backend.budget.used == 0
+    backend.close()

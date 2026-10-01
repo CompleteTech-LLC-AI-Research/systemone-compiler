@@ -152,6 +152,9 @@ class HierarchyCompiler:
         fixed_source = source.model_copy(deep=True)
         if (self.options.architect == "dspy" or self.options.optimizer == "gepa") and self.teacher is None:
             raise ConfigurationError("Hierarchy structure or wording search requires an explicit teacher.")
+        if self.options.optimizer == "gepa" and self.options.max_metric_calls < len(validation) + 2:
+            # Known before any request: GEPA needs the initial validation pass plus proposals.
+            raise ConfigurationError("GEPA metric budget must exceed initial validation evaluation.")
         candidate = lower_hierarchy(source)
         guard = preflight.split_guard
         if guard.graph_sha256 != candidate.content_hash:
