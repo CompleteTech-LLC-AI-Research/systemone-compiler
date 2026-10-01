@@ -127,7 +127,13 @@ class HierarchyEvidence:
                 pass
         elif not self.directory.is_dir():
             raise ConfigurationError("Hierarchy evidence directory does not exist.")
-        self.lock_file = (self.directory / ".owner.lock").open("a+b")
+        try:
+            self.lock_file = (self.directory / ".owner.lock").open("a+b")
+        except OSError as exc:
+            raise ConfigurationError(
+                "Cannot open the hierarchy evidence ownership lock. Replay and resume require "
+                "a writable lock file; copy archived evidence into a private writable directory."
+            ) from exc
         try:
             _lock(self.lock_file)
             self._open_locked()

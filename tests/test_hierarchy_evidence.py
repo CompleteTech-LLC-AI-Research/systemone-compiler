@@ -442,3 +442,27 @@ def test_swapped_or_dropped_events_break_the_chain(tmp_path):
     events.write_bytes(b"".join([lines[0], *lines[2:]]))  # one event removed from the middle
     with pytest.raises(DataError, match="event chain"):
         runtime().run(state, evidence_dir=directory, evidence_mode="replay")
+
+
+@pytest.mark.parametrize("mode", ["replay", "resume"])
+def test_unwritable_owner_lock_reports_configuration_error_without_dispatch(tmp_path, monkeypatch, mode):
+    state = CASES["chain.json"]["state"]
+    directory = tmp_path / "read-only-evidence"
+    runtime().run(state, evidence_dir=directory)
+    paths = [directory / name for name in ("manifest.json", "attempts.json", "events.jsonl")]
+    before = {path: path.read_bytes() for path in paths}
+    original = Path.open
+
+    def deny_owner_lock(path, *args, **kwargs):
+        if path == directory / ".owner.lock":
+            raise PermissionError("synthetic read-only evidence")
+        return original(path, *args, **kwargs)
+
+    backend = Recording()
+    with monkeypatch.context() as context:
+        context.setattr(Path, "open", deny_owner_lock)
+        with pytest.raises(ConfigurationError, match="writable lock file") as caught:
+            runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode=mode)
+    assert isinstance(caught.value.__cause__, PermissionError)
+    assert backend.calls == []
+    assert {path: path.read_bytes() for path in paths} == before
