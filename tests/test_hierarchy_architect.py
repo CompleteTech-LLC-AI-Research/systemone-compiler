@@ -161,3 +161,46 @@ def test_rejected_candidate_keeps_prior_valid_graph_and_never_reaches_test():
     assert session.selected_source == bad
     assert session.phase == "selected"
     assert semantic_review_manifest(bad, bad)["changed_composition"] == []
+
+
+def _mutated(source, edit):
+    data = copy.deepcopy(source.model_dump(mode="json"))
+    leaf = next(stage for stage in data["graph"]["stages"] if "program" in stage)
+    edit(leaf["program"])
+    return HierarchySource.model_validate(data)
+
+
+@pytest.mark.parametrize("name,edit", [
+    ("policies", lambda program: program["policies"]["department"].update(force_review=True)),
+    ("noul_threshold", lambda program: program["policies"]["department"].update(noul_threshold=0.9)),
+    ("decision_weight", lambda program: program["decisions"]["department"].update(weight=2.0)),
+    ("decision_criteria", lambda program: program["decisions"]["department"]["criteria"].update(
+        billing="a different label description")),
+    ("state", lambda program: program["state"]["message"].update(description="changed description")),
+])
+def test_semantic_review_reports_leaf_changes_beyond_prompts_and_goals(name, edit):
+    original = HierarchySource.load(FIXTURE)
+    changed = _mutated(original, edit)
+    assert changed != original
+    review = semantic_review_manifest(original, changed)
+    assert review["changed_composition"], name
+    assert any(entry["path"].endswith("/program") for entry in review["changed_composition"])
+
+
+def test_semantic_review_keeps_goal_and_prompt_changes_in_their_own_regions():
+    original = HierarchySource.load(FIXTURE)
+    goal = semantic_review_manifest(original, _mutated(
+        original, lambda program: program["decisions"]["department"].update(goal="A different goal?")))
+    assert goal["changed_routing_goals_or_conditions"] and not goal["changed_composition"]
+    prompt = semantic_review_manifest(original, _mutated(
+        original, lambda program: program["questions"]["department"]["criteria"].update(
+            billing="rewritten wording only")))
+    assert prompt["changed_child_prompts"] and not prompt["changed_composition"]
+
+
+def test_semantic_review_ignores_bookkeeping_only_changes():
+    original = HierarchySource.load(FIXTURE)
+    changed = _mutated(original, lambda program: program["provenance"].update(note="bookkeeping only"))
+    review = semantic_review_manifest(original, changed)
+    assert not (review["changed_composition"] or review["changed_child_prompts"]
+                or review["changed_routing_goals_or_conditions"])
