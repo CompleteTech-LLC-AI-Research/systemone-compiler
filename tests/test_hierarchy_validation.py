@@ -270,6 +270,181 @@ def test_numeric_route_intervals_prove_disjointness_and_detect_overlap():
         lower_hierarchy(HierarchySource.model_validate(data))
 
 
+# --- lexical scope of frozen qualified IDs, origins, references, and finals ----------------------
+def _scoped_source():
+    """Two root signals feed `first` (two export levels) and `second` (one level)."""
+    chain = fixture("chain")
+    signal, priority = chain["graph"]["stages"]
+    score = chain["graph"]["outputs"]["priority"]
+    port = {"message": chain["graph"]["inputs"]["message"],
+            "urgent": {"type": "boolean", "description": "", "required": True}}
+
+    def final(stage):
+        return {"candidates": [{"stage": stage, "decision": "priority",
+                                "distribution_scope": "full_contract"}], "on_missing": "review_required"}
+
+    def signal_stage(name):
+        return {**copy.deepcopy(signal), "id": name}
+
+    def invoke(stage_id, definition, producer):
+        return {"id": stage_id, "kind": "subgraph", "definition": definition, "inputs": {
+            "message": {"root": "message"},
+            "urgent": {"stage": producer, "decision": "urgent", "field": "value"}}}
+
+    leaf = {**copy.deepcopy(priority), "inputs": {"message": {"root": "message"}, "urgent": {"root": "urgent"}}}
+    forward = {"message": {"root": "message"}, "urgent": {"root": "urgent"}}
+    outputs = {"first_priority": score, "second_priority": score}
+    return {"format": chain["format"], "source": {**chain["source"], "decisions": outputs},
+            "limits": chain["limits"],
+            "definitions": {
+                "grade": {"inputs": port, "outputs": {"priority": score}, "stages": [leaf],
+                          "final": {"priority": final("priority")}},
+                "outer": {"inputs": port, "outputs": {"priority": score}, "final": {"priority": final("inner")},
+                          "stages": [{"id": "inner", "kind": "subgraph", "definition": "grade",
+                                      "inputs": forward}]}},
+            "graph": {"inputs": chain["graph"]["inputs"], "outputs": outputs,
+                      "stages": [signal_stage("signal"), signal_stage("signal2"),
+                                 invoke("first", "outer", "signal"), invoke("second", "grade", "signal2")],
+                      "final": {"first_priority": final("first"), "second_priority": final("second")}}}
+
+
+def _scoped_artifact():
+    return lower_hierarchy(HierarchySource.model_validate(_scoped_source()))
+
+
+def _find(items, name):
+    return next(item for item in items if item["id"] == name)
+
+
+def _reorigin(data, node_id, origin):
+    node = _find(data["nodes"], node_id)
+    old, node["source_id"] = node["source_id"], origin
+    data["source_to_nodes"][old].remove(node_id)
+    if not data["source_to_nodes"][old]:
+        del data["source_to_nodes"][old]
+    data["source_to_nodes"].setdefault(origin, []).append(node_id)  # Keep the map consistent.
+
+
+def _route_on(data, name, stage_id):
+    _find([*data["nodes"], *data["exports"]], name)["when"] = {"all": [{
+        "ref": {"stage": stage_id, "decision": "priority", "field": "value"}, "op": "lt", "value": 2}]}
+
+
+def _drift_to_root(data):
+    _reorigin(data, "first/inner/priority", "root:priority")
+
+
+def _drift_depth(data):
+    _reorigin(data, "first/inner/priority", "grade:priority")
+
+
+def _drift_local_stage(data):
+    _reorigin(data, "first/inner/priority", "outer/grade:other")
+
+
+def _wrong_origin_leaf(data):
+    _reorigin(data, "second/priority", "outer/grade:priority")
+
+
+def _inconsistent_chain(data):
+    _reorigin(data, "first/inner/priority", "other/grade:priority")
+    data["nodes"].append({**copy.deepcopy(_find(data["nodes"], "first/inner/priority")),
+                          "id": "first/inner/twin", "source_id": "outer/grade:twin"})
+    data["source_to_nodes"]["outer/grade:twin"] = ["first/inner/twin"]
+    _find(data["exports"], "first/inner")["after"] = []
+
+
+def _final_escapes_export(data):
+    _find(data["exports"], "first")["outputs"]["priority"]["candidates"][0]["stage"] = "second/priority"
+
+
+def _root_final_reaches_into_export(data):
+    data["final"]["first_priority"]["candidates"][0]["stage"] = "first/inner/priority"
+
+
+def _leaf_reads_unpassed_root_stage(data):
+    _find(data["nodes"], "second/priority")["inputs"]["urgent"] = {
+        "stage": "signal", "decision": "urgent", "field": "value"}
+
+
+def _leaf_reads_sibling_scope(data):
+    _route_on(data, "second/priority", "first/inner/priority")
+
+
+def _root_reads_descendant(data):
+    _route_on(data, "second", "first/inner/priority")
+
+
+def _after_crosses_scope(data):
+    _find(data["nodes"], "first/inner/priority")["after"] = ["second/priority"]
+
+
+def _empty_export(data):
+    decision = _find(data["nodes"], "signal")["program"]["decisions"]["urgent"]
+    data["exports"].append({
+        "id": "ghost", "input_contracts": {"message": _find(data["nodes"], "signal")["program"]["state"]["message"]},
+        "output_contracts": {"urgent": decision}, "inputs": {"message": {"root": "message", "default": None}},
+        "outputs": {"urgent": {"candidates": [{"stage": "signal", "decision": "urgent", "label_map": None,
+                                               "distribution_scope": "full_contract"}],
+                               "on_missing": "review_required"}},
+        "when": None, "after": [], "on_review": "defer"})
+    _find(data["exports"], "second")["after"] = ["ghost"]  # Referenced, but nothing lives under it.
+
+
+def _rechecksummed(tmp_path, data):
+    from typewright.io import atomic_json, fingerprint
+
+    path = tmp_path / "tampered.s1.json"
+    atomic_json(path, {"artifact": data, "sha256": fingerprint(data)})
+    return path
+
+
+def test_honest_nested_artifact_passes_with_inherited_root_stage_references(tmp_path):
+    artifact = _scoped_artifact()
+    inherited = _find(artifact.model_dump(mode="json")["nodes"], "second/priority")["inputs"]["urgent"]
+    assert inherited["stage"] == "signal2"  # A nested leaf may read a parent-scope stage the export passed down.
+    path = tmp_path / "honest.s1.json"
+    artifact.save(path)
+    assert load_artifact(path).content_hash == artifact.content_hash
+    assert artifact.source_to_nodes["outer/grade:priority"] == ["first/inner/priority"]
+
+
+@pytest.mark.parametrize("tamper,reason", [
+    (_drift_to_root, "node origin differs from its export chain"),
+    (_drift_depth, "node origin differs from its export chain"),
+    (_drift_local_stage, "node origin differs from its export chain"),
+    (_wrong_origin_leaf, "node origin differs from its export chain"),
+    (_inconsistent_chain, "node origin differs from its export chain"),
+    (_final_escapes_export, "final candidate crosses its subgraph scope"),
+    (_root_final_reaches_into_export, "final candidate crosses its subgraph scope"),
+    (_leaf_reads_unpassed_root_stage, "reference crosses its subgraph scope"),
+    (_leaf_reads_sibling_scope, "reference crosses its subgraph scope"),
+    (_root_reads_descendant, "reference crosses its subgraph scope"),
+    (_after_crosses_scope, "after edge crosses its subgraph scope"),
+    (_empty_export, "subgraph export has no descendant node"),
+])
+def test_rechecksummed_scope_tampering_is_rejected_by_validation_not_checksum(tmp_path, tamper, reason):
+    data = _scoped_artifact().model_dump(mode="json")
+    tamper(data)
+    with pytest.raises(DataError, match=reason):
+        load_artifact(_rechecksummed(tmp_path, data))
+
+
+def test_empty_id_segments_are_rejected_on_load_and_by_the_validator(tmp_path):
+    from typewright.hierarchy import HierarchyArtifact, LoweredNode
+
+    data = _scoped_artifact().model_dump(mode="json")
+    _find(data["nodes"], "second/priority")["id"] = "second//priority"
+    with pytest.raises(ValidationError, match="Qualified hierarchy IDs"):
+        load_artifact(_rechecksummed(tmp_path, data))
+    # A mutated in-memory artifact can skip field validation; the validator still checks every segment.
+    artifact = _scoped_artifact()
+    node = artifact.nodes[-1]
+    artifact.nodes[-1] = LoweredNode.model_construct(**{**dict(node), "id": f"{node.id.rsplit('/', 1)[0]}//x"})
+    with pytest.raises(DataError, match="invalid qualified ID segment"):
+        validate_hierarchy_artifact(HierarchyArtifact.model_construct(**dict(artifact)))
+
+
 # --- graph size, call, and nesting-depth limits (bounded acyclic plans) -------------------------
 _CONTRACT = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
 

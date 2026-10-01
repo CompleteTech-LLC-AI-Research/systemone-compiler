@@ -10,7 +10,7 @@ from .errors import DataError
 from .hierarchy import (Candidate, Condition, Graph, HierarchyArtifact, HierarchySource, LeafStage,
                         Reference, RootRef, StageRef, lower_hierarchy)
 from .hierarchy_data import HierarchySplitGuard
-from .models import Decision, StateField, project_state
+from .models import ID, Decision, StateField, project_state
 
 
 @dataclass(frozen=True)
@@ -384,18 +384,67 @@ def validate_hierarchy_compile_inputs(source: HierarchySource,
     return ValidationPlan(order=plan.order, split_guard=HierarchySplitGuard(lower_hierarchy(source), splits))
 
 
+def _scope(name: str) -> str:
+    """Export ID that lexically contains a qualified stage; empty for the root graph."""
+    return name.rpartition("/")[0]
+
+
+def _validate_scopes(artifact: HierarchyArtifact, stages: dict[str, Any], export_ids: set[str]) -> None:
+    """Tie each stage to its export chain, as lowering builds it, and keep edges lexical.
+
+    Lowering rebases a stage's references into its own scope; the only way a reference leaves
+    that scope is through the inputs its enclosing export passed down. Finals and `after` edges
+    never leave their scope. Node origins name the definition path of that same export chain.
+    """
+    definitions: dict[str, str] = {}
+    for node in artifact.nodes:
+        parts = node.id.split("/")
+        origin, _, local = node.source_id.partition(":")
+        path = [] if origin == "root" else origin.split("/")
+        if local != parts[-1] or len(path) != len(parts) - 1 or "root" in path:
+            _fail("artifact", node.id, "node origin differs from its export chain")
+        for depth, definition in enumerate(path):
+            if definitions.setdefault("/".join(parts[:depth + 1]), definition) != definition:
+                _fail("artifact", node.id, "node origin differs from its export chain")
+    inherited = {export.id: list(export.inputs.values()) for export in artifact.exports}
+    for name, stage in stages.items():
+        scope = _scope(name)
+        if name in export_ids and not any(node.id.startswith(f"{name}/") for node in artifact.nodes):
+            _fail("artifact", name, "subgraph export has no descendant node")
+        refs = list(stage.inputs.values())
+        if stage.when:
+            refs.extend(predicate.ref for predicate in stage.when.all)
+        for ref in refs:
+            if isinstance(ref, StageRef) and _scope(ref.stage) == scope:
+                continue
+            if not (ref in inherited[scope] if scope else isinstance(ref, RootRef)):
+                _fail("artifact", name, "reference crosses its subgraph scope")
+        if any(_scope(after) != scope for after in stage.after):
+            _fail("artifact", name, "after edge crosses its subgraph scope")
+    for export in artifact.exports:
+        for mapping in export.outputs.values():
+            if any(_scope(candidate.stage) != export.id for candidate in mapping.candidates):
+                _fail("artifact", export.id, "final candidate crosses its subgraph scope")
+    for mapping in artifact.final.values():
+        if any(_scope(candidate.stage) for candidate in mapping.candidates):
+            _fail("artifact", "final", "final candidate crosses its subgraph scope")
+
+
 def validate_hierarchy_artifact(artifact: HierarchyArtifact) -> tuple[str, ...]:
     """Recheck a frozen graph's typed transitive edges before any model call."""
     stages = {stage.id: stage for stage in [*artifact.nodes, *artifact.exports]}
     export_ids = {export.id for export in artifact.exports}
     for name in stages:
         parts = name.split("/")
+        if not all(ID.fullmatch(part) for part in parts):
+            _fail("artifact", name, "invalid qualified ID segment")
         depth = len(parts) - 1 + (name in export_ids)
         if depth > artifact.limits.max_depth:
             _fail("artifact", name, "frozen nesting depth limit exceeded")
         for length in range(1, len(parts)):
             if "/".join(parts[:length]) not in export_ids:
                 _fail("artifact", name, "qualified stage has no parent subgraph export")
+    _validate_scopes(artifact, stages, export_ids)
     outputs = {node.id: node.program.decisions for node in artifact.nodes}
     outputs.update({export.id: export.output_contracts for export in artifact.exports})
     dependencies: dict[str, set[str]] = {}
