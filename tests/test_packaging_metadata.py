@@ -36,7 +36,7 @@ def test_runtime_dependencies_exclude_optimizer_and_sdk(pyproject):
 def test_optional_extras_pin_documented_integration_targets(pyproject):
     extras = pyproject["project"]["optional-dependencies"]
     assert "typesafe-sdk==0.7.0" in extras["live"]
-    assert "dspy[litellm]==3.3.1" in extras["optimize"]
+    assert "dspy[litellm]>=3.3.1,<3.5" in extras["optimize"]
     assert "gepa==0.1.4" in extras["optimize"]
 
 
