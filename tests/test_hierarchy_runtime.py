@@ -102,6 +102,67 @@ def test_unmatched_branch_reviews_without_inventing_public_decision():
     assert len(recorder.calls) == 1
 
 
+def test_nonidentity_label_map_preserves_conditional_child_distribution():
+    data = HierarchySource.load(FIXTURES / "conditional.json").model_dump(mode="json")
+    child = next(stage for stage in data["graph"]["stages"] if stage["id"] == "billing")["program"]
+    criteria = child["decisions"]["resolution"]["criteria"]
+    renamed = {"credit": criteria["refund"], "other": criteria["general"]}
+    child["decisions"]["resolution"]["criteria"] = renamed
+    child["questions"]["resolution"]["criteria"] = renamed
+    data["graph"]["final"]["resolution"]["candidates"][0]["label_map"] = {
+        "credit": "refund", "other": "general"}
+
+    class ChildRecording(Recording):
+        def evaluate(self, program, state):
+            response = super().evaluate(program, state)
+            if program.name == "billing":
+                self.child_probabilities = copy.deepcopy(response.answers["resolution"]["probabilities"])
+            return response
+
+    recorder = ChildRecording()
+    artifact = lower_hierarchy(HierarchySource.model_validate(data))
+    result = HierarchyRuntime(artifact, ManagedBackend(recorder)).run({"message": "refund invoice charge"})
+    assert result["status"] == "completed"
+    assert [name for name, _ in recorder.calls] == ["router", "billing"]
+    final = result["decisions"]["resolution"]
+    assert final["value"] == "refund"
+    assert final["origin"] == {"stage": "billing", "decision": "resolution"}
+    assert final["distribution_scope"] == "branch_conditional"
+    assert set(final["probabilities"]) == {"credit", "other"}
+    assert final["probabilities"] == pytest.approx(recorder.child_probabilities)
+    assert max(recorder.child_probabilities, key=recorder.child_probabilities.get) == "credit"
+
+
+@pytest.mark.parametrize("threshold,enabled", [(0.599999, True), (0.6, True), (0.600001, False)])
+def test_noul_threshold_routes_on_value_without_changing_p_true(threshold, enabled):
+    data = HierarchySource.load(FIXTURES / "chain.json").model_dump(mode="json")
+    data["graph"]["stages"][0]["program"]["policies"]["urgent"]["noul_threshold"] = threshold
+    data["graph"]["stages"][1]["when"] = {"all": [{
+        "ref": {"stage": "signal", "decision": "urgent", "field": "value"},
+        "op": "eq", "value": True}]}
+
+    class FixedNoul(Recording):
+        def evaluate(self, program, state):
+            response = super().evaluate(program, state)
+            if program.name == "signal":
+                response.answers["urgent"]["noul"] = 0.6
+                self.p_true = response.answers["urgent"]["noul"]
+            return response
+
+    recorder = FixedNoul()
+    result = HierarchyRuntime(lower_hierarchy(HierarchySource.model_validate(data)),
+                              ManagedBackend(recorder)).run({"message": "urgent outage"})
+    assert recorder.p_true == 0.6
+    assert [name for name, _ in recorder.calls] == (["signal", "priority"] if enabled else ["signal"])
+    assert result["accounting"]["requests_attempted"] == (2 if enabled else 1)
+    assert result["stages"]["priority"]["status"] == ("completed" if enabled else "skipped")
+    assert result["status"] == ("completed" if enabled else "review_required")
+    if not enabled:
+        assert result["decisions"] == {}
+    else:
+        assert recorder.calls[-1][1]["urgent"] is True
+
+
 def test_skipped_subgraph_marks_all_nested_stages_with_reason():
     data = json.loads((FIXTURES / "nested.json").read_text(encoding="utf-8"))
     data["graph"]["stages"][0]["when"] = {"all": [{
