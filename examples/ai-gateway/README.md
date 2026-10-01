@@ -51,6 +51,14 @@ be reconstructed. No raw prompt logging or response disk cache is enabled.
 Pollinations is disabled: the tested key returned 403 for `typesafe/jev-1.13`
 and 400 for `jev-1.13-free`. Enabling this unverified route fails closed.
 
+Consent boundary: these routes belong to the existing benchmark worker and take
+their paid-call approval from that worker's launcher, not from a flag in this
+module. Routes 3 to 5 (BeatAPI, OpenCode Zen, Classifier.dev) send study inputs to
+third-party endpoints and run only when their `AI_GATEWAY_ROUTE_N_ENABLED` value is
+`true`; routes 1 and 2 have no such switch. Enable a route only with separate,
+recorded approval to share those inputs, and never reuse this module for the
+hierarchy study, which has its own consent flags.
+
 ## Reporting
 
 Aggregate per-phase telemetry records attempts, responses, tokens, retries and
@@ -59,7 +67,13 @@ route usage every ten seconds and at close. On Windows, run
 This one-shot observer uses the existing selected-resume-12 handoff/status
 protocol: it waits for activation, reports the first ten minutes, writes JSON
 and Markdown, and submits desktop notifications via notify.ps1. It neither
-starts inference nor interrupts workers. Adapt the handoff ID for other studies.
+starts inference nor interrupts workers. It does write `new-route-throughput.*`
+files into the run directory, and notify.ps1 registers a notification identity under
+`HKCU:\Software\Classes\AppUserModelId` on first use. Requests and tokens per
+second are the sum of every `rate-telemetry` file in the run directory divided by
+the time since activation, so earlier phases or processes that left telemetry
+there inflate both figures; treat them as approximate, not as a benchmark.
+Adapt the handoff ID for other studies.
 
 The report's historical four-worker references use different windows and
 workloads; they are not a controlled causal speedup comparison. Transport checks
