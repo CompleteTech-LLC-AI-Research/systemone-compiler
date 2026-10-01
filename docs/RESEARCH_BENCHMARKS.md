@@ -271,6 +271,9 @@ Review the budget and baseline contracts, and configure credentials locally.
 ```
 
 Live availability is not established by this implementation. Existing experiment
-notes report occasional high-cardinality Jev probability-sum failures. The runtime
-validation remains strict; such failures abort and are reported. No tolerance was
-relaxed to make this benchmark suite run.
+notes ([EXPERIMENTS.md](EXPERIMENTS.md)) report that Jev quantizes probabilities, which
+broke the original fixed probability-sum tolerance at 77 labels. `runtime.py` now
+derives the tolerance from the decimal grid actually returned, capped at
+`MAX_SUM_DRIFT` (0.05); full-precision responses stay at 1e-4. Distributions outside
+that bound abort and are reported. This benchmark suite did not change the
+tolerance.

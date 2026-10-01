@@ -1,5 +1,7 @@
 # Research suite verification — 2026-09-20
 
+Note: the project was renamed from System One Compiler (`s1compiler`) to Typewright (`typewright`) after this record was written; commands and paths below use the names in effect at the time.
+
 This records executed software and data checks, not model-quality results.
 See [the study protocol and commands](RESEARCH_BENCHMARKS.md) for the methods,
 controls, statistical assumptions, source citations, and limitations.

@@ -126,6 +126,13 @@ excludes provenance. A changed artifact must be revalidated and saved through th
 model. SHA256 detects accidental/tampered-content mismatch relative to the stored
 hash, but is not an authenticity signature: an attacker can recompute it.
 
+Legacy names are kept on purpose after the rename from System One Compiler to
+Typewright, so existing artifacts and checksums stay valid: the `.s1.json`
+extension, the `systemone-*` format identifiers (such as `systemone-program/v1`),
+the `"systemone-compiler"` provenance key (also printed by `doctor`), and the
+`S1_TEACHER_*` environment variables. Renaming any of them is a format change that
+needs a migration, not a find-and-replace.
+
 Production only requires the base package and `live` extra. JSON schema and native
 playground export make the questions inspectable outside the compiler. The native
 export does **not** export local composition, policy fitting, or action execution.

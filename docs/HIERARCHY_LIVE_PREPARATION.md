@@ -28,7 +28,12 @@ No prediction or measured task quality influences this procedure.
 
 Outputs include four JSONL splits, a fixed source contract, authored hierarchy
 draft, flat baseline, source license, aggregate provenance/coverage report,
-request estimates, and an explicitly **pending** human attestation. All original
+request estimates, and an explicitly **pending** human attestation (files:
+the four `<split>.jsonl` splits, `source.json`, `flat_baseline.s1.json`,
+`authored_draft.s1.json`, `preparation.json` and `data-attestation.pending.json`
+in a new `--out` directory; the license is `DATA_LICENSE_CC_BY_4.0.txt`). That
+attestation's `label_origin` is `upstream_human_judgments_majority_positive`; live
+registration requires `independent_human_reviewed`, so it cannot be used as is. All original
 60 labels remain supported; filtering can leave rare labels absent from an
 individual split. Groups cover identities and bilingual text, not original
 speaker membership. Public-corpus pretraining contamination and semantic

@@ -16,8 +16,11 @@ artifact, report = compiler.compile(source, train=train, validation=validation,
 artifact.save("frozen-graph.json")
 ```
 
-The equivalent explicit sequence is `select`, `calibrate`, `freeze`, then
-`test`. Selection runs registered train examples, evaluates the authored graph
+`HierarchyCompiler(backend, teacher=None, options=...)` needs a teacher only for
+the opt-in paths below. The CLI equivalent is `typewright compile SOURCE` with the
+four split paths and `--out DIR`, which writes `hierarchy.s1.json` and
+`report.json`. The equivalent explicit sequence is `select`, `calibrate`, `freeze`,
+then `test`. Selection runs registered train examples, evaluates the authored graph
 and a fixed-contract flat template on validation, and never reads test results.
 With `HierarchyCompileOptions(architect="dspy", structural_rounds=1..10)`, an
 explicitly configured `DSPyTeacher` may propose bounded structure from train
@@ -25,7 +28,9 @@ examples and sealed train traces. Each complete graph is validated and scored on
 validation before acceptance. Rejected JSON or graph data leaves the prior
 candidate intact; provider and budget failures propagate. With
 `optimizer="gepa"`, GEPA edits only qualified child question text after structure
-selection. It evaluates each candidate through the complete graph on train or
+selection (`--optimizer gepa`; it needs the `optimize` extra and a
+`max_metric_calls`, default 128, of at least the validation row count plus two).
+It evaluates each candidate through the complete graph on train or
 validation roots. Its metric-call budget counts root evaluations; the shared
 `ManagedBackend` separately counts every native stage call. The compiler
 rechecks selected wording on validation, then calibrates and freezes it before

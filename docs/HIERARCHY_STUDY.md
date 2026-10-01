@@ -68,9 +68,11 @@ For a pinned public corpus with upstream human judgments and a reproducible
 four-split preparation, see [human-annotated study preparation](HIERARCHY_LIVE_PREPARATION.md).
 Its pending review record cannot authorize live registration or teacher sharing.
 
-A live registration needs a new, independently human-reviewed four-split
+A live registration (`register --mode typesafe --selected-method dspy_gepa` with a
+`--teacher-model`) needs a new, independently human-reviewed four-split
 dataset, an attested test origin, a reviewer, and two SHA256 exclusion lists in
-`--data-attestation`: `prior_test_input_sha256s` for whole projected states and
+`--data-attestation` (`label_origin` must be `independent_human_reviewed`, with
+`test_independence_evidence` and `reviewer` set): `prior_test_input_sha256s` for whole projected states and
 `prior_test_text_sha256s` for nonempty string values in prior holdout inputs.
 Set `prior_test_text_normalization` to `casefold_whitespace_v1` (Unicode
 casefold, then collapse whitespace). The software checks exact projected-input
@@ -97,8 +99,9 @@ Combine the task lists into the two attestation arrays above, retain their
 protocol/manifest provenance, and obtain human independence review separately.
 Keep these sensitive files local: input fingerprints are not anonymization.
 It also requires fixed teacher/model settings, native and teacher call ceilings,
-per-call price caps from a verified quote, and an externally enforced billing
-cap large enough for the declared worst case. These caps are assumptions until
+per-call price caps from a verified quote (`--provider-call-price-cap-usd`,
+`--teacher-call-price-cap-usd`), and an externally enforced billing cap
+(`--external-billing-cap-usd`) large enough for the declared worst case. These caps are assumptions until
 independently verified; hashes are integrity checks, not signatures or
 anonymization.
 

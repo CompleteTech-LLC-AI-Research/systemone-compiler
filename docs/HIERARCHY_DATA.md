@@ -29,7 +29,8 @@ distinct registered roots are allowed under the same root-bound lineage rule;
 they are not independent observations or permission to share evaluation traces.
 Leaf programs require nonempty declared state before split projection runs.
 `HierarchyTeacherInputs(guard).routed_train_subset(...)` deduplicates only
-within the same training group and stage-input hash. It rejects evaluation
+traces with the same training group (or root ID), stage-input hash, final
+label, human intermediate labels and stage prediction. It rejects evaluation
 rows instead of dropping them.
 
 Optional `HierarchyExample.annotations` hold only explicitly human-sourced

@@ -70,6 +70,23 @@ synthetic hierarchy executions with no provider calls.
 - `S1_TEACHER_API_BASE`, `S1_TEACHER_API_KEY`: optional teacher endpoint/key overrides.
 - `TYPESAFE_BASE_URL`: SDK-native endpoint override; validate the destination before use.
 
-No dotenv loading is built in. No actual teacher model is chosen for the user, and
-no API secrets are packaged. The compiled runtime depends on the base library plus
-`live`; DSPy and GEPA are optional compile-time extras.
+The `S1_` prefix is kept after the rename to Typewright so existing environments
+keep working. No dotenv loading is built in. No actual teacher model is chosen for
+the user, and no API secrets are packaged. The compiled runtime depends on the base
+library plus `live`; DSPy and GEPA are optional compile-time extras.
+
+## Gateway example adapters
+
+`examples/ai-gateway/` holds opt-in adapters that route native typed Jev
+evaluation through additional gateways (two Vercel credentials, BeatAPI, OpenCode
+Zen, Classifier.dev) with local concurrency caps and pacing, plus traffic
+reporting. They are examples, not part of the installed package: the compiler and
+runtime never import them and the default backend stays the mock. They read a
+local `.env.local` explicitly. They refuse to build a backend unless the caller
+passes `allow_paid=True`, and every route runs only when its
+`AI_GATEWAY_ROUTE_N_ENABLED` value is `true`; enabling a route sends study inputs
+to a third party and needs its own recorded approval. Provider model IDs map to
+the pinned `jev-1.13.0` only under the operator's own equivalence confirmation,
+not an independent attestation.
+Unexpected returned model identities fail. None of these routes has been verified
+live in this repository. See `examples/ai-gateway/README.md` for caps and setup.

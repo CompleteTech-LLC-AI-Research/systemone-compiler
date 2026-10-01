@@ -1,5 +1,7 @@
 # Benchmark recovery
 
+Note: the project was renamed from System One Compiler (`s1compiler`) to Typewright (`typewright`) after this record was written; commands and paths below use the names in effect at the time.
+
 The reusable recovery helper and its regression tests are included in this
 repository. The v31 launcher, reconciliation receipts, and study-specific tests
 described below belong to the local, ignored `runs/live-study-20260920/` directory;
@@ -9,7 +11,7 @@ The study's native request layer already retries transient HTTP and read-timeout
 failures twice. Previously, exhaustion of those attempts discarded the active
 batch and unwound the optimizer and study worker.
 
-The v31 repair uses `s1compiler.resilience.recover_batch` at the study batch
+The v31 repair uses `s1compiler.resilience.recover_batch` (now `typewright.resilience.recover_batch`) at the study batch
 boundary. It drains in-flight work, retains successful results in their original
 order, and retries only failed rows after shared cooldowns of 60, 120 and 240
 seconds. No new rows start during recovery. Heartbeats continue while waiting.

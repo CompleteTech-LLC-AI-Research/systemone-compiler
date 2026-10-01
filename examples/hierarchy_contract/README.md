@@ -1,6 +1,6 @@
 # Hierarchy contract fixtures
 
-These JSON files are the concrete source-format examples for [the hierarchy ADR](../../docs/HIERARCHY_CONTRACT.md). Each leaf embeds a valid flat `systemone-program/v1` program. The small [preview](preview.py) executes the valid graphs with the existing lexical mock backend to pin route order and output meaning before the production compiler and runtime work in issues #8–#21. It is synthetic and never calls Jev or a teacher.
+These JSON files are the concrete source-format examples for [the hierarchy ADR](../../docs/HIERARCHY_CONTRACT.md). Each leaf embeds a valid flat `systemone-program/v1` program. The small [preview](preview.py) executes the valid graphs with the existing lexical mock backend to pin route order and output meaning before the production compiler and runtime work in issues #8–#21 (now implemented under `typewright.hierarchy*`; see the [hierarchy docs](../../docs/HIERARCHY_RUNTIME.md)). It is synthetic and never calls Jev or a teacher.
 
 From the repository root with the package installed:
 
@@ -19,4 +19,4 @@ The three `invalid_*.json` fixtures fail before constructing a backend: cycle, u
 python examples/hierarchy_contract/generate_fixtures.py
 ```
 
-The preview is a reference interpreter for these fixtures, not a public hierarchy API or the final static validator. Future work must preserve the observed behavior while adding frozen artifacts, complete path validation, shared budgets, durable evidence, compilation and metrics. A mock prediction is never a real Jev result.
+The preview is a reference interpreter for these fixtures, not a public hierarchy API or the static validator; the production equivalents are `lower_hierarchy`, `validate_hierarchy_source` and `HierarchyRuntime`, which also provide frozen artifacts, shared budgets, durable evidence, compilation and metrics. A mock prediction is never a real Jev result.

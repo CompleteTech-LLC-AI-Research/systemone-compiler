@@ -3,6 +3,11 @@
 Started 2026-09-19. Records experiments actually executed against this package,
 with their raw outputs, and a prioritized backlog of proposed ones.
 
+Note: the project was renamed from System One Compiler (`s1compiler`) to Typewright
+(`typewright`) after most of this log was written. Quoted raw outputs (for example
+the `s1:` error prefix below) keep the names in effect when captured; current CLI
+errors are prefixed `typewright:`.
+
 **E1-E3 and the BANKING77 section used the synthetic `mock-lexical/v1` fixture
 and are not Jev measurements. E4 and E5 are real `jev-1.13.0` measurements** (48
 live requests, operator-authorized). No claim of real prompt-quality improvement

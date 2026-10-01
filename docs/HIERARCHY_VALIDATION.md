@@ -10,8 +10,9 @@ source graph, stage, and affected field where possible.
 
 Validation rejects dependency cycles, recursive definitions, unknown or
 unreachable stages, undeclared root fields, incompatible typed ports, unsafe
-references, route predicates with invalid labels or literal types, and required
-inputs that can read a skipped predecessor. A required input from a guarded
+references, route predicates with invalid labels or literal types, contradictory
+route conditions, conditions that read optional values, stages that cannot affect
+a final output, and required inputs that can read a skipped predecessor. A required input from a guarded
 stage needs an equivalent or stronger guard on its consumer. Optional ports
 may omit a value; typed defaults are allowed only on optional receiving ports.
 An `after` edge orders stages but does not supply data. Final mappings must
@@ -24,7 +25,7 @@ composition.
 `validate_hierarchy_compile_inputs(source, splits)` also requires exactly
 train, validation, calibration, and test and reuses the repository's duplicate
 ID, projected-input, group, and label checks. Construct any paid backend or
-teacher only after this preflight succeeds. The frozen artifact loader reruns
+teacher only after this preflight succeeds. The frozen artifact loader (`validate_hierarchy_artifact`) reruns
 typed edge, route, terminal, and cycle checks, including when a file's checksum
 was recomputed after an invalid edit. Checksums are integrity checks, not
 publisher signatures.

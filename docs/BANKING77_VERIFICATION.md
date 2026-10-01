@@ -1,7 +1,9 @@
 # BANKING77 implementation verification — 2026-09-19
 
+Note: the project was renamed from System One Compiler (`s1compiler`) to Typewright (`typewright`) after this record was written; commands and paths below use the names in effect at the time.
+
 Implemented the [experiment protocol](BANKING77_EXPERIMENT.md) in
-`src/s1compiler/banking77.py`, with regression tests in `tests/test_banking77.py`.
+`src/typewright/banking77.py`, with regression tests in `tests/test_banking77.py`.
 The existing compiler, runtime, adapters, and dependency pins were not changed.
 README now links the protocol. This directory is not a Git checkout; no commit,
 push, PR, or remote CI execution was performed.

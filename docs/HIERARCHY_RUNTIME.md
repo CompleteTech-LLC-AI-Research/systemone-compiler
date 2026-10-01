@@ -21,7 +21,11 @@ finally:
 
 This example is a **synthetic software check**, not a Jev quality measurement.
 `HierarchyRuntime.load(path, backend)` loads a saved artifact. Existing flat
-`Runtime` and `Program` APIs are unchanged.
+`Runtime` and `Program` APIs are unchanged. `typewright run ARTIFACT --state FILE`
+dispatches here for a hierarchy artifact and exits 2 on `failed` or `cancelled`.
+The CLI passes `enforce_release=True` unless `--allow-unvalidated` is given; with a
+non-synthetic backend that refuses an artifact whose provenance status is not
+`measured`. The library default is `enforce_release=False`.
 
 The runner projects declared root fields, builds separate child states from
 typed bindings, and publishes each answer only after the leaf runtime validates
@@ -33,9 +37,11 @@ once per invocation. Backend failures stop the graph and produce `failed`,
 without fabricated decisions; a caller cancellation callback produces
 `cancelled` before the next stage dispatch.
 
-Results contain `status`, `decisions`, native `executed` leaf IDs, a `path`,
-per-stage statuses and reason codes, the graph content hash, model identity,
-synthetic/live identity, and attempt/cache-hit counts. A completed result has
+Results (`systemone-hierarchy-result/v1`) contain `status`, `decisions`, native
+`executed` leaf IDs, a `path`, per-stage statuses and reason codes in `stages`, the
+graph hash as `graph_sha256`, `model`, `backend` and `synthetic` identity, an
+`evidence` summary, and `accounting` with attempt and cache-hit counts. A run bound
+to a split guard also carries a `lineage` block. A completed result has
 all public decisions. Missing outputs or propagated review produce
 `review_required`. A branch-local Choice keeps its child probability labels
 and `branch_conditional` scope; only its selected value is mapped to the public
@@ -61,11 +67,13 @@ and the static worst-case leaf count. Unknown tokens and dollar cost remain
 unknown, never estimated from mock answers.
 
 `run(..., timeout_seconds=30, cancel_requested=callback)` checks cancellation
-before each dispatch and after a late response. Already admitted work finishes
-and stays charged. No retry is the default. An explicit
-`GraphRetryPolicy(max_transient_retries=1)` permits bounded retries for transport
-timeouts/connections; malformed answers need a separate
-`max_invalid_response_retries` setting. Identity, contract, and budget errors
+(or an expired deadline) before each dispatch and after a late response. Already
+admitted work finishes and stays charged. No retry is the default. An explicit
+`GraphRetryPolicy(max_transient_retries=1)` from `typewright.hierarchy_runtime`,
+passed as `HierarchyRuntime(..., retry_policy=...)`, permits bounded retries for
+transport timeouts/connections; malformed answers need a separate
+`max_invalid_response_retries` setting. Retry counts are 0 to 3 and `delay_seconds`
+is 0 to 15. Identity, contract, and budget errors
 remain fatal. Retry settings are recorded in the attempt ledger. The runner is
 serial, so batch-only `recover_batch` is not invoked.
 
