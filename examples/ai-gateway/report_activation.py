@@ -1,4 +1,9 @@
-"""Read-only one-shot observer: report the first ten minutes after activation."""
+"""One-shot observer: report the first ten minutes after activation.
+
+It never starts inference or touches benchmark data, but it writes new-route-throughput.* into the run
+directory and notifies through notify.ps1. Rates sum every rate-telemetry file present, so leftover
+telemetry from earlier phases inflates them; they are approximate.
+"""
 
 import json
 import subprocess
