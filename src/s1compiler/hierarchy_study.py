@@ -865,7 +865,14 @@ def _execute_record(directory: Path, item: dict[str, str], row, frozen: dict[str
                 raise DataError("Flat in-flight attempt identity changed.")
             raise DataError("Flat attempt may have reached the provider; automatic retry is unsafe.")
         _envelope_write(marker, {"identity": identity, "owner_start_used": prior_used})
-        result = Runtime(program, backend, enforce_release=False).run(row.state)
+        try:
+            result = Runtime(program, backend, enforce_release=False).run(row.state)
+        except BaseException:
+            # The budget is reserved before dispatch, so an unchanged count proves no request left
+            # this process and the row can be retried. Anything else stays uncertain.
+            if backend.budget.used == prior_used:
+                marker.unlink(missing_ok=True)
+            raise
         attempts = backend.budget.used - prior_used
         if attempts != 1:
             raise DataError("Flat row did not consume exactly one native attempt.")
@@ -887,6 +894,56 @@ def _execute_record(directory: Path, item: dict[str, str], row, frozen: dict[str
     record = {"identity": identity, "result": result, "native_attempts": attempts,
               "backend": backend.identity, "synthetic": backend.synthetic}
     _envelope_write(path, record)
+    return record
+
+
+def reconcile_flat_attempt(frozen_dir: str | Path, execution_dir: str | Path, *, root_id: str,
+                           reviewer: str, attestation: str) -> dict[str, Any]:
+    """Record a human claim that an in-flight flat request never reached the provider.
+
+    A hard crash can leave a started marker with no result. The marker normally blocks resume because
+    the request may have been charged. This command does not prove anything: it stores who asserted
+    that no request was sent, and why, then lets resume retry that one row. A wrong claim means an
+    uncounted provider call, so the external billing cap must still cover it.
+    """
+    if not isinstance(reviewer, str) or not reviewer.strip() or not isinstance(attestation, str) or (
+        not attestation.strip()
+    ):
+        raise ConfigurationError("Reconciliation needs a reviewer and the evidence for the claim.")
+    frozen_dir, execution_dir = Path(frozen_dir), Path(execution_dir)
+    frozen, programs = load_frozen(frozen_dir)
+    protocol = frozen["protocol"]
+    rows = read_hierarchy_jsonl(Path(protocol["datasets"]["test"]["path"]), programs["hierarchy_authored"])
+    start = _envelope_read(execution_dir / "test-started.json")
+    if start.get("frozen_sha256") != fingerprint(frozen):
+        raise DataError("Execution directory belongs to a different frozen study.")
+    by_id = {row.id: row for row in rows}
+    if root_id not in by_id:
+        raise DataError("Unknown held-out root ID.")
+    item = next(entry for entry in start["schedule"] if entry["arm"] == "flat_authored" and entry["id"] == root_id)
+    path = _record_path(execution_dir, item)
+    marker = path.with_suffix(".started.json")
+    identity = _record_identity(item, by_id[root_id], frozen)
+    from .hierarchy_evidence import _lock, _unlock
+    with (execution_dir / ".owner.lock").open("a+b") as owner:
+        _lock(owner)
+        try:
+            if path.exists():
+                raise DataError("This row already has a result; nothing to reconcile.")
+            if not marker.exists():
+                raise DataError("This row has no in-flight marker.")
+            if _envelope_read(marker).get("identity") != identity:
+                raise DataError("In-flight marker identity differs from the schedule.")
+            number = len(list(path.parent.glob(f"{item['key']}.reconciled-*.json"))) + 1
+            record = {"format": "systemone-hierarchy-study-reconciliation/v1", "identity": identity,
+                      "claim": "no provider request was sent for this attempt",
+                      "reviewer": reviewer.strip(), "evidence": attestation.strip(),
+                      "reconciled_at": datetime.now(timezone.utc).isoformat(),
+                      "marker_sha256": _file_sha256(marker), "sequence": number}
+            _envelope_write(path.parent / f"{item['key']}.reconciled-{number}.json", record)
+            marker.unlink()
+        finally:
+            _unlock(owner)
     return record
 
 
@@ -1025,7 +1082,7 @@ def report_study(frozen_dir: str | Path, execution_dir: str | Path) -> dict[str,
         raise DataError("Held-out execution is incomplete or has different provenance.")
     expected_files = {_record_path(execution_dir, item).resolve() for item in schedule}
     actual_files = {path.resolve() for path in (execution_dir / "records").glob("*/*.json")
-                    if not path.name.endswith(".started.json")}
+                    if not path.name.endswith(".started.json") and ".reconciled-" not in path.name}
     if actual_files != expected_files:
         raise DataError("Held-out result set contains missing or extra arm/root records.")
     by_id = {row.id: row for row in rows}
@@ -1103,7 +1160,11 @@ def report_study(frozen_dir: str | Path, execution_dir: str | Path) -> dict[str,
                      "native_attempts": attempts[arm],
                      "unknown_usage_calls": metrics["usage"]["usage_unknown_calls"],
                      "teacher_ledger": frozen["arms"][arm].get("teacher_accounting")}
+    reconciliations = [{"arm": arm, "file": path.name, "reviewer": _envelope_read(path).get("reviewer")}
+                       for arm in ARMS for path in sorted((execution_dir / "records" / arm).glob("*.reconciled-*.json"))
+                       ] if (execution_dir / "records").is_dir() else []
     report = {"format": "systemone-hierarchy-study-report/v1", "study_id": protocol["study_id"],
+              "reconciled_attempts": reconciliations,
               "status": "synthetic" if frozen["synthetic"] else "measured",
               "synthetic": frozen["synthetic"], "deployment_approved": False,
               "protocol_sha256": fingerprint(protocol), "frozen_sha256": fingerprint(frozen),
@@ -1191,6 +1252,12 @@ def main(argv: list[str] | None = None) -> int:
     test.add_argument("--allow-paid", action="store_true")
     test.add_argument("--reviewed-frozen-sha256")
     test.add_argument("--semantic-review-approved", action="store_true")
+    reconcile = sub.add_parser("reconcile", help="Record a human claim that a flat attempt was never sent.")
+    reconcile.add_argument("--frozen", type=Path, required=True)
+    reconcile.add_argument("--execution", type=Path, required=True)
+    reconcile.add_argument("--root-id", required=True)
+    reconcile.add_argument("--reviewer", required=True)
+    reconcile.add_argument("--evidence", required=True, help="Why no provider request could have been sent.")
     reporting = sub.add_parser("report", help="Strict offline replay and complete-report validation.")
     reporting.add_argument("--frozen", type=Path, required=True)
     reporting.add_argument("--execution", type=Path, required=True)
@@ -1239,6 +1306,11 @@ def main(argv: list[str] | None = None) -> int:
                                  semantic_review_approved=args.semantic_review_approved)
             print(json.dumps({"status": report["status"], "n_root": report["n_root"],
                               "synthetic": report["synthetic"]}))
+        elif args.command == "reconcile":
+            record = reconcile_flat_attempt(args.frozen, args.execution, root_id=args.root_id,
+                                            reviewer=args.reviewer, attestation=args.evidence)
+            print(json.dumps({"status": "reconciled_unverified_claim", "sequence": record["sequence"],
+                              "claim": record["claim"]}))
         else:
             report = report_study(args.frozen, args.execution)
             print(json.dumps({"status": report["status"], "n_root": report["n_root"],

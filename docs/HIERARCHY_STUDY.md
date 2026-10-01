@@ -33,6 +33,14 @@ automatically. This preserves request accounting instead of hiding a possible
 charged call. `report` strictly replays every graph without provider calls,
 recomputes flat decisions from typed answers, and refuses incomplete evidence.
 
+The runner removes a flat in-flight marker itself when the owner budget proves no request
+was admitted (for example a failure before dispatch). After a hard crash the marker stays and
+resume refuses. If a human can show that no request was sent, `s1-study reconcile --frozen F
+--execution E --root-id ID --reviewer NAME --evidence TEXT` records that unverified claim in a
+`.reconciled-N.json` file next to the row, removes the marker, and lets `test --resume` retry
+that one row. The command proves nothing. A wrong claim means one uncounted provider call, so
+the external billing cap must still cover it. `report` lists every reconciliation.
+
 ## Preregistered comparison
 
 All three arms share the same four disjoint splits, root IDs, groups, fixed
