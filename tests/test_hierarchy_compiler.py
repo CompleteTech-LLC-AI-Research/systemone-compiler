@@ -151,3 +151,59 @@ def test_undersized_gepa_budget_is_rejected_before_any_native_call():
     assert CountingBackend.calls == 0
     assert backend.budget.used == 0
     backend.close()
+
+
+def _calibrated_inputs(per_label=6):
+    source, splits = inputs()
+    rows = []
+    for index in range(per_label):
+        rows.append(Example(id=f"cal_refund_{index}", state={"message": f"refund invoice charge calibration {index}"},
+                            expected={"resolution": "refund"}, group=f"group_cal_refund_{index}"))
+        rows.append(Example(id=f"cal_bug_{index}", state={"message": f"software crash bug calibration {index}"},
+                            expected={"resolution": "bug_fix"}, group=f"group_cal_bug_{index}"))
+    splits["calibration"] = rows
+    return source, splits
+
+
+def _compile(source, splits, minimum):
+    backend = ManagedBackend(MockBackend(), max_calls=400)
+    compiler = HierarchyCompiler(backend, options=HierarchyCompileOptions(min_calibration_samples=minimum))
+    artifact, report = compiler.compile(source, **splits)
+    backend.close()
+    return artifact, report
+
+
+def test_enough_calibration_samples_fit_review_gates_from_calibration_rows_only():
+    source, splits = _calibrated_inputs()
+    artifact, report = _compile(source, splits, minimum=3)
+    fit = report["calibration"]["fit"]["resolution"]
+    assert set(fit) == {"billing", "technical"}
+    for label, entry in fit.items():
+        assert entry["status"] == "fitted", label
+        assert entry["observed_n"] == 6 and entry["accepted_n"] == 6
+        assert entry["empirical_error"] == 0.0
+        assert 0.0 < entry["policy"]["min_gate"] <= 1.0 and entry["policy"]["force_review"] is False
+        gate = artifact.final_review_gates["resolution"][label]
+        assert (gate.min_gate, gate.force_review) == (entry["policy"]["min_gate"], False)
+    assert report["calibration"]["after_gates"]["coverage"]["completed_n"] == 12
+
+
+def test_too_few_calibration_samples_force_review_for_every_root():
+    source, splits = _calibrated_inputs()
+    artifact, report = _compile(source, splits, minimum=50)
+    for label, entry in report["calibration"]["fit"]["resolution"].items():
+        assert entry["status"] == "review_only" and entry["observed_n"] == 6
+        assert entry["policy"] == {"min_gate": 0.0, "force_review": True}
+        assert artifact.final_review_gates["resolution"][label].force_review is True
+    after = report["calibration"]["after_gates"]["coverage"]
+    assert after["completed_n"] == 0 and after["review_n"] == 12
+
+
+def test_fitted_gates_do_not_depend_on_validation_or_test_labels():
+    source, splits = _calibrated_inputs()
+    first, _ = _compile(source, splits, minimum=3)
+    changed_source, changed = _calibrated_inputs()
+    changed["validation"][0].expected = {"resolution": "refund"}  # wrong label, held-out rows only
+    changed["test"][0].expected = {"resolution": "refund"}
+    second, _ = _compile(changed_source, changed, minimum=3)
+    assert first.final_review_gates == second.final_review_gates
