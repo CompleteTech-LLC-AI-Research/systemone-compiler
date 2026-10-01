@@ -35,6 +35,13 @@ New artifacts start `draft`, with `composition_measured=false` and
 composition and contain only measured leaves; a measured child alone does not
 establish measured graph quality. Deployment approval remains an independent
 explicit decision. The composition report checksum is a required audit pointer,
+not an approval record. The loader preserves an externally supplied
+`deployment_approved=true` for metadata compatibility; it does not verify that
+claim or authorize deployment, paid calls, data sharing, or application actions.
+Applications must verify approval in their own trusted review system, binding
+the decision to the exact artifact and publisher. Never use this editable flag
+as an authorization gate. Compiler and study outputs always set it to false.
+The composition report checksum is
 not a cryptographic proof that the evaluation was honest. The
 [static validator](HIERARCHY_VALIDATION.md) checks authored and frozen graph
 dataflow. The [native hierarchy runtime](HIERARCHY_RUNTIME.md) executes frozen

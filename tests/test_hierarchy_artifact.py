@@ -10,13 +10,30 @@ import pytest
 from pydantic import ValidationError
 
 from s1compiler.cli import main
-from s1compiler.errors import DataError
+from s1compiler.errors import ConfigurationError, DataError
 from s1compiler.hierarchy import HierarchyArtifact, HierarchySource, load_artifact, lower_hierarchy
 from s1compiler.io import atomic_json
 from s1compiler.models import Program
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "examples" / "hierarchy_contract"
+
+
+def test_external_deployment_claim_is_metadata_and_does_not_authorize_paid_backend(tmp_path):
+    from s1compiler.backends import TypeSafeBackend
+
+    original = lower_hierarchy(HierarchySource.load(FIXTURES / "chain.json"))
+    claimed = original.model_copy(deep=True)
+    claimed.provenance.deployment_approved = True
+    path = tmp_path / "external-claim.s1.json"
+    claimed.save(path)
+    loaded = load_artifact(path)
+    assert loaded.provenance.deployment_approved is True
+    assert loaded.provenance.status == original.provenance.status == "draft"
+    assert loaded.content_hash == original.content_hash
+    assert loaded.provenance_hash != original.provenance_hash
+    with pytest.raises(ConfigurationError, match="explicit allow_paid"):
+        TypeSafeBackend(allow_paid=False)
 
 
 @pytest.mark.parametrize("name", ["chain", "conditional", "diamond", "nested"])
