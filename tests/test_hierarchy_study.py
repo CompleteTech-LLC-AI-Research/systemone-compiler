@@ -678,3 +678,90 @@ def test_mock_selection_needs_no_ledger_and_can_repeat(tmp_path):
     select_and_freeze(protocol_path, tmp_path / "first")
     select_and_freeze(protocol_path, tmp_path / "second")
     assert not study._selection_ledger_path(protocol_path).exists()
+
+
+def _rows(spec):
+    """spec: list of (id, group). Returns row stand-ins with only the fields the statistics read."""
+    from types import SimpleNamespace
+    return [SimpleNamespace(id=row_id, group=group) for row_id, group in spec]
+
+
+def test_quantile_interpolates_linearly_and_handles_one_value():
+    assert study._quantile([4.0], 0.5) == 4.0
+    assert study._quantile([0.0, 10.0], 0.25) == 2.5
+    assert study._quantile([3.0, 1.0, 2.0, 4.0], 0.0) == 1.0
+    assert study._quantile([3.0, 1.0, 2.0, 4.0], 1.0) == 4.0
+    assert study._quantile([3.0, 1.0, 2.0, 4.0], 0.5) == 2.5
+
+
+def test_paired_clusters_weights_by_root_not_by_group():
+    # Group A has three roots each +1; group B has one root at -1. Root mean is 0.5, group mean is 0.
+    rows = _rows([("a1", "A"), ("a2", "A"), ("a3", "A"), ("b1", "B")])
+    left = {"a1": 1.0, "a2": 1.0, "a3": 1.0, "b1": 0.0}
+    right = {"a1": 0.0, "a2": 0.0, "a3": 0.0, "b1": 1.0}
+    result = study._paired_clusters(rows, left, right, seed=1, bootstrap=200, permutations=200)
+    assert result["mean_root_utility_delta"] == pytest.approx(0.5)
+    assert result["n_groups"] == 2 and result["n_roots"] == 4
+    lower, upper = result["cluster_bootstrap_ci_95"]
+    assert -1.0 <= lower <= upper <= 1.0
+
+
+def test_paired_clusters_zero_difference_has_p_one_and_degenerate_interval():
+    rows = _rows([(f"r{i}", f"g{i}") for i in range(6)])
+    same = {row.id: 0.5 for row in rows}
+    result = study._paired_clusters(rows, same, dict(same), seed=3, bootstrap=100, permutations=500)
+    assert result["mean_root_utility_delta"] == 0.0
+    assert result["two_sided_group_sign_flip_p"] == 1.0
+    assert result["cluster_bootstrap_ci_95"] == [0.0, 0.0]
+
+
+def test_paired_clusters_sign_flip_p_matches_the_exact_value_for_a_unanimous_effect():
+    # Eight groups all favour the left arm, so the exact two-sided p is 2 / 2**8 = 0.0078125.
+    rows = _rows([(f"r{i}", f"g{i}") for i in range(8)])
+    left = {row.id: 1.0 for row in rows}
+    right = {row.id: 0.0 for row in rows}
+    result = study._paired_clusters(rows, left, right, seed=11, bootstrap=100, permutations=20000)
+    assert result["mean_root_utility_delta"] == 1.0
+    assert result["two_sided_group_sign_flip_p"] == pytest.approx(2 / 256, abs=0.004)
+    assert result["cluster_bootstrap_ci_95"] == [1.0, 1.0]
+
+
+def test_paired_clusters_is_deterministic_and_bonferroni_interval_is_wider():
+    rows = _rows([(f"r{i}", f"g{i % 5}") for i in range(20)])
+    left = {row.id: float(index % 3) for index, row in enumerate(rows)}
+    right = {row.id: float((index * 7) % 4) for index, row in enumerate(rows)}
+    first = study._paired_clusters(rows, left, right, seed=5, bootstrap=400, permutations=400)
+    again = study._paired_clusters(rows, left, right, seed=5, bootstrap=400, permutations=400)
+    other = study._paired_clusters(rows, left, right, seed=6, bootstrap=400, permutations=400)
+    assert first == again
+    assert first["cluster_bootstrap_ci_95"] != other["cluster_bootstrap_ci_95"] or (
+        first["two_sided_group_sign_flip_p"] != other["two_sided_group_sign_flip_p"])
+    lo, hi = first["cluster_bootstrap_ci_95"]
+    blo, bhi = first["cluster_bootstrap_bonferroni_ci_95"]
+    assert blo <= lo <= hi <= bhi
+    assert 0.0 < first["two_sided_group_sign_flip_p"] <= 1.0
+
+
+def test_paired_clusters_refuses_a_single_group():
+    rows = _rows([("a", "G"), ("b", "G")])
+    values = {"a": 1.0, "b": 0.0}
+    with pytest.raises(DataError, match="two independent root groups"):
+        study._paired_clusters(rows, values, {"a": 0.0, "b": 0.0}, seed=1, bootstrap=100, permutations=100)
+
+
+def test_roots_without_a_group_cluster_by_their_own_id():
+    rows = _rows([("a", None), ("b", None), ("c", None)])
+    result = study._paired_clusters(rows, {"a": 1.0, "b": 1.0, "c": 1.0}, {"a": 0.0, "b": 0.0, "c": 0.0},
+                                    seed=2, bootstrap=100, permutations=100)
+    assert result["n_groups"] == 3 and result["n_roots"] == 3
+
+
+def test_holm_adjusts_the_two_primary_comparisons_monotonically():
+    from s1compiler.research_stats import holm
+    assert holm({"a": 0.01, "b": 0.04}) == pytest.approx({"a": 0.02, "b": 0.04})
+    # The smaller raw p cannot end up with a larger adjusted p than the larger raw p.
+    adjusted = holm({"a": 0.03, "b": 0.02})
+    assert adjusted["b"] == pytest.approx(0.04) and adjusted["a"] == pytest.approx(0.04)
+    assert holm({"a": 0.9, "b": 0.8}) == pytest.approx({"a": 1.0, "b": 1.0})
+    with pytest.raises(ValueError):
+        holm({"a": 1.5})
