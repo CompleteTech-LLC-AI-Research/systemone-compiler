@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/banner.jpg" alt="Violet and cyan diagram of typed decision blocks funneling through a compiler into a sealed JSON program capsule." width="100%"></p>
+
 <div align="center">
 
 # Typewright
