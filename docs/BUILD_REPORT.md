@@ -140,3 +140,66 @@ Not executed: any live TypeSafe or teacher request, real GEPA optimization, DSPy
 patch releases above 3.4.0, `dspy[typesafe]`/`ReAnchor`/native decision types, Python
 3.11-3.13 and non-Windows runs, remote CI, `build`/wheel/demo under 3.4.0, and a re-read
 of primary documentation (the inspection date is unchanged).
+
+## October 3, 2026 organization delivery checkpoint
+
+These Linux Python 3.14.7 receipts extend the historical records above; they do
+not replace Windows, live-provider, or independent quality qualification. The
+exact optional profiles used DSPy 3.3.1 or 3.4.0, GEPA 0.1.4, TypeSafe SDK 0.7.0,
+LiteLLM 1.103.2 and Pydantic 2.13.5. No paid inference or private sharing was
+authorized.
+
+- [PR #99](https://github.com/Jev-Engineering/TypeWright/pull/99), triage
+  regressions: head `a7ab0042957f67fc857981ba9ae62775a9604355`, merge
+  `5165fb6d8d05307e7b1467f5fd2bbb34cdf8e5d4`; isolated full suite **618 passed**,
+  zero skipped; Ruff and independent review passed.
+- [PR #100](https://github.com/Jev-Engineering/TypeWright/pull/100), owner-approved
+  hierarchy tracking split: merge `0563956cbac62bd899d5fddad734f84a4ae608e2`.
+  Software acceptance for #20/#21 is complete; their original live criteria remain
+  explicitly open in #74 and #6. Independent scope/state review passed.
+- [PR #101](https://github.com/Jev-Engineering/TypeWright/pull/101), opt-in native
+  calibration fitting: head `c316283c8fc612990f74246958edaab9aaa4ec08`, merge
+  `aa448275822e69a6356ee32ac36ba3ffa73ab950`; isolated full suite **640 passed**,
+  zero skipped. Calibration isolation, unchanged results and independently
+  committed legacy artifact/checksum compatibility were verified.
+- [PR #102](https://github.com/Jev-Engineering/TypeWright/pull/102), teacher raw
+  completion metering: head `f9080cba8416a88642bf8ed14d91bdbd505c523d`, merge
+  `67a53ee047dd9a14a70abdf13641974087d42457`; isolated full suites **628 passed**,
+  zero skipped, on each DSPy profile. An early inherited legacy-completion path
+  accidentally attempted an uncredentialed synthetic provider request and received
+  HTTP 401. That failure is retained; composition and loopback/socket guards
+  replaced the bypass before the successful final suites. No paid inference or
+  private examples were sent.
+- [PR #103](https://github.com/Jev-Engineering/TypeWright/pull/103), compile-only
+  native adapter: head `de7c82dd3fe5ba3b81ceceb49cab07db206c4bae`, merge
+  `821b29d627b602b0b042b474fd5a2248febd5c74`; isolated full suite **685 passed** on
+  DSPy 3.4.0; **667 passed, 18 skipped** on 3.3.1 because native qualification
+  requires exactly 3.4.0. The historical dependency assertion initially failed
+  after `all` selected the exact native profile; the revised test preserves the
+  separate teacher range and both full reruns passed. Independent source, wiring
+  and dependency review passed. Ruff, build, 51 wheel source members, all four
+  entrypoints, fresh no-key demos and the synthetic study journey passed. Runtime
+  and adapter-module imports loaded no DSPy, GEPA or SDK.
+
+Other retained attempts: #99 initially failed two subprocess imports without the
+checkout's explicit `PYTHONPATH`; a mutable-worktree attempt during edits also
+failed. The stable isolated rerun passed. #101 had an interrupted mutable-root
+run and a nested replay identity failure while a concurrent build created
+package metadata. A stable post-build causal check and full suite passed. Early
+installed-wheel study attempts combined incompatible fixtures and were correctly
+rejected; the final complete fixture passed. These attempts are separate from
+the successful final acceptance receipts above.
+
+Each PR above completed **10 successful exact-head hosted checks** and
+**five successful checks observed on its actual merge commit**. For #103 the
+[merge workflow](https://github.com/Jev-Engineering/TypeWright/actions/runs/37127560430)
+ran on `821b29d627b602b0b042b474fd5a2248febd5c74`; this is executed remote
+evidence, unlike the earlier shipped-configuration checkpoint. Local main was
+fast-forwarded to that merge without changing original user files or deleting
+retained packet/worktree evidence.
+
+NOT_RUN: live native provider qualification, representative independent quality
+studies, hierarchy paid selection/teacher sharing/held-out dispatch, production
+activation, administrative CI/protection changes and a fully resolved dependency
+lock. The gateway destination patch in PR #98 still awaits the owner's endpoint
+policy decision. Synthetic checks do not establish gains or production approval.
