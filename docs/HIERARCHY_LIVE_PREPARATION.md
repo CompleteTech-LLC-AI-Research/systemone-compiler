@@ -103,3 +103,15 @@ approved. Only train examples and train traces would be eligible for teacher
 sharing; validation, calibration, and test remain excluded. Selection approval
 does not authorize the held-out phase. The teacher's moving alias must be
 rechecked and recorded before selection; native Jev remains pinned.
+
+## Consuming prior-holdout export pairs
+
+New exact-input exports record each task's `declared_input_fields`. Use
+`typewright.holdout_exclusions.read_holdout_exclusions(input_path, text_path, task)`
+to validate a matching export pair and merge its returned fields into the reviewed
+data attestation. Live registration compares all four splits through both the new
+source projection and the prior declared fields, and checks case-folded,
+whitespace-normalized text. This catches exact prior-input overlap when the new
+source adds fields. Legacy manually supplied hash lists remain readable but do not
+provide prior-field identity assurance. Neither form establishes semantic
+independence or authorizes uploads; a human still reviews near duplicates.
