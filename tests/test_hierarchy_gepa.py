@@ -288,3 +288,54 @@ def test_provider_or_programming_errors_in_the_proposer_propagate(error):
     with pytest.raises(type(error), match=str(error)):
         adapter.propose_new_texts(candidate, reflection, [key])
     assert adapter.invalid_candidates == 0
+
+
+@pytest.mark.parametrize("value,reason", [("not JSON private-sentinel", "component_json"),
+                                         ("42", "prompt_entry_type"), (3, "component_text")])
+def test_invalid_feedback_has_only_coarse_diagnostics(value, reason):
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
+    rows = dataset()
+    candidate = components_from_hierarchy(artifact)
+    key = next(iter(candidate))
+    candidate[key] = value
+    backend = ManagedBackend(MockBackend())
+    adapter = HierarchyGEPAAdapter(artifact, rows, backend, FixedTeacher(), batch_factory=Batch)
+    batch = adapter.evaluate(rows["train"], candidate, capture_traces=True)
+    assert batch.trajectories == [{"error": "invalid_typed_graph_text_candidate", "reason": reason}]
+    feedback = adapter.make_reflective_dataset(candidate, batch, [key])
+    assert feedback[key][0]["Feedback"]["reason"] == reason
+    assert "private-sentinel" not in canonical(feedback)
+    assert rows["train"][0].state["message"] not in canonical(feedback)
+    assert backend.budget.used == 0
+
+
+def test_missing_requested_candidate_key_fails_before_teacher_and_fallback():
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
+    rows = dataset()
+    candidate = components_from_hierarchy(artifact)
+    key = next(iter(candidate))
+    candidate.pop(key)
+    adapter = HierarchyGEPAAdapter(artifact, rows, ManagedBackend(MockBackend()),
+                                  _Proposer(error=AssertionError("teacher must not run")), batch_factory=Batch)
+    batch = adapter.evaluate(rows["train"], candidate, capture_traces=True)
+    reflection = adapter.make_reflective_dataset(candidate, batch, [key])
+    with pytest.raises(CandidateError, match="missing or unknown"):
+        adapter.propose_new_texts(candidate, reflection, [key])
+    assert batch.trajectories[0]["reason"] == "component_addresses"
+
+
+def test_candidate_split_guard_failure_propagates_without_zero_quality(monkeypatch):
+    artifact = lower_hierarchy(HierarchySource.load(FIXTURES / "conditional.json"))
+    rows = dataset()
+    backend = ManagedBackend(MockBackend())
+    adapter = HierarchyGEPAAdapter(artifact, rows, backend, FixedTeacher(), batch_factory=Batch)
+
+    def fail(*_args):
+        raise DataError("split guard failure sentinel")
+
+    monkeypatch.setattr("typewright.hierarchy_gepa.HierarchySplitGuard", fail)
+    with pytest.raises(DataError, match="split guard failure"):
+        adapter.evaluate(rows["train"], components_from_hierarchy(artifact), capture_traces=True)
+    assert adapter.invalid_candidates == 0
+    assert not adapter._issued_traces
+    assert backend.budget.used == 0

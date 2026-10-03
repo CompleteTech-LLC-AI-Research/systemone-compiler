@@ -14,6 +14,14 @@ from .hierarchy_validation import validate_hierarchy_artifact
 from .io import canonical, fingerprint, json_loads
 
 
+class _GraphTextCandidateError(CandidateError):
+    """Fixed diagnostic vocabulary, never parser messages or candidate content."""
+
+    def __init__(self, reason: str):
+        super().__init__("Graph text candidate violates the frozen typed contract.")
+        self.reason = reason
+
+
 def _locations(artifact: HierarchyArtifact) -> dict[str, tuple[int, str, str, int | None]]:
     """Indexed criteria avoid collisions from arbitrary Choice label text."""
     locations = {}
@@ -62,16 +70,20 @@ def hierarchy_text_structure_hash(artifact: HierarchyArtifact) -> str:
 def hierarchy_from_components(base: HierarchyArtifact, candidate: dict[str, str]) -> HierarchyArtifact:
     expected = components_from_hierarchy(base)
     if not isinstance(candidate, dict) or set(candidate) != set(expected):
-        raise CandidateError("Graph text candidate cannot add or remove component addresses.")
+        raise _GraphTextCandidateError("component_addresses")
     if candidate == expected:
         return base.model_copy(deep=True)
     data = base.model_dump(mode="json")
+    reason = "typed_contract"
     try:
         for key, (index, qid, section, offset) in _locations(base).items():
+            reason = "component_text"
             text = candidate[key]
             if not isinstance(text, str) or len(text) > 24000:
                 raise ValueError("Invalid component text or size.")
+            reason = "component_json"
             value = json_loads(text)
+            reason = "prompt_entry_type"
             if value is not None and not isinstance(value, (str, dict, list)):
                 raise ValueError("Invalid prompt entry type.")
             question = data["nodes"][index]["program"]["questions"][qid]
@@ -82,6 +94,7 @@ def hierarchy_from_components(base: HierarchyArtifact, candidate: dict[str, str]
                 question["criteria"][label] = value
             else:
                 question["criteria"][offset] = value
+        reason = "typed_contract"
         for node in data["nodes"]:
             node["program"]["provenance"] = {"status": "draft", "deployment_approved": False,
                                                "architect": "graph_text_optimization"}
@@ -96,7 +109,7 @@ def hierarchy_from_components(base: HierarchyArtifact, candidate: dict[str, str]
             raise ValueError("Graph topology or typed contract changed during text optimization.")
         return result
     except (ValueError, TypeError, KeyError, IndexError, DataError) as exc:
-        raise CandidateError("Graph text candidate violates the frozen typed contract.") from exc
+        raise _GraphTextCandidateError(reason) from exc
 
 
 def _correct(declaration, predicted: Any, gold: Any) -> bool:
@@ -158,15 +171,16 @@ class HierarchyGEPAAdapter:
         self.metric_rows += len(rows)
         try:
             artifact = hierarchy_from_components(self.artifact, candidate)
-            guard = HierarchySplitGuard(artifact, self.splits)
-        except (CandidateError, DataError):
+        except CandidateError as exc:
             self.invalid_candidates += 1
-            traces = ([{"error": "invalid_typed_graph_text_candidate"} for _ in rows]
+            traces = ([{"error": "invalid_typed_graph_text_candidate",
+                        "reason": getattr(exc, "reason", "typed_contract")} for _ in rows]
                       if capture_traces else None)
             if capture_traces:
                 self._issued_traces.add((fingerprint(candidate), fingerprint(traces)))
             return factory(outputs=[{"error": "invalid_candidate"} for _ in rows],
                            scores=[0.0] * len(rows), trajectories=traces)
+        guard = HierarchySplitGuard(artifact, self.splits)
         report, results = evaluate_hierarchy(artifact, rows, self.backend, guard=guard, split=split)
         scores = [report["quality_by_root_id"][row.id] for row in rows]
         traces = None
@@ -210,6 +224,7 @@ class HierarchyGEPAAdapter:
                                                   "stage": trace.get("stage_predictions", {}).get(stage_id)},
                             "Feedback": {"root_quality": trace.get("root_quality"),
                                          "error": trace.get("error"),
+                                         "reason": trace.get("reason"),
                                          "final_errors": trace.get("final_errors", []),
                                          "annotated_stage_errors": [entry for entry in
                                                                     trace.get("annotated_stage_errors", [])
@@ -222,6 +237,10 @@ class HierarchyGEPAAdapter:
         return result
 
     def propose_new_texts(self, candidate, reflective_dataset, components_to_update):
+        if (not isinstance(candidate, dict) or not components_to_update or
+                any(key not in candidate or key not in _locations(self.artifact)
+                    for key in components_to_update)):
+            raise CandidateError("Proposal requested a missing or unknown graph text component.")
         if (fingerprint(candidate), fingerprint(reflective_dataset)) not in self._issued_reflections:
             raise DataError("Teacher reflection did not originate from registered train traces.")
         try:

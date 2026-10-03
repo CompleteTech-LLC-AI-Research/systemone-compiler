@@ -83,6 +83,8 @@ def test_equal_mixed_stage_projections_remain_bound_to_distinct_split_roots():
     results = [HierarchyRuntime(frozen, backend).run(
         rows[name][0].state, lineage=guard.bind(frozen, name, rows[name][0])) for name in NAMES]
     assert all(result["status"] == "completed" for result in results)
+    assert all(result["lineage"]["stage_inputs"]["priority"]["origin"] == "derived_or_routed"
+               for result in results)
     assert len({result["lineage"]["stage_inputs"]["priority"]["input_sha256"]
                 for result in results}) == 1
     assert [result["lineage"]["split"] for result in results] == list(NAMES)

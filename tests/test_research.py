@@ -23,7 +23,6 @@ def source_for_test(task):
 
 def test_prior_holdout_export_is_test_only_and_preserves_registered_inputs(datasets, tmp_path, np):
     from typewright.holdout_exclusions import export
-    from typewright.hierarchy_study import _normalized_text_fingerprints
     from typewright.models import project_state
 
     protocol_path = tmp_path / "protocol.json"
@@ -38,8 +37,10 @@ def test_prior_holdout_export_is_test_only_and_preserves_registered_inputs(datas
         source, splits, _, _ = data.load_dataset(datasets / task)
         test_states = [project_state(source.state, row.state) for row in splits["test"]]
         assert inputs["tasks"][task]["projected_input_sha256s"] == sorted(map(fingerprint, test_states))
-        assert texts["tasks"][task]["normalized_text_sha256s"] == sorted(set().union(
-            *(_normalized_text_fingerprints(state) for state in test_states)))
+        assert inputs["tasks"][task]["declared_input_fields"] == sorted(source.state)
+        assert texts["tasks"][task]["normalized_text_sha256s"] == sorted({
+            fingerprint(f"{task} test {field} example {i}")
+            for field in source.state for i in range(12)})
         train_hashes = {fingerprint(project_state(source.state, row.state)) for row in splits["train"]}
         assert not train_hashes.intersection(inputs["tasks"][task]["projected_input_sha256s"])
     assert {path: path.read_bytes() for path in before} == before
@@ -475,3 +476,72 @@ def test_prior_holdout_export_removes_a_partial_output_so_the_run_can_be_retried
     result = module.export(protocol_path, tmp_path / "exports", data_root=datasets)
     assert result["tasks"] == 5
     assert (tmp_path / "exports/prior-test-text-exclusions.json").is_file()
+
+
+@pytest.mark.parametrize("variant", ["exact_extra_field", "case_whitespace"])
+def test_export_consumer_roundtrip_rejects_live_overlap(datasets, tmp_path, np, variant):
+    from pathlib import Path
+
+    from typewright.hierarchy import HierarchySource
+    from typewright.hierarchy_study import register
+    from typewright.holdout_exclusions import export, read_holdout_exclusions
+    from typewright.models import StateField
+
+    protocol_path = tmp_path / "prior.json"
+    research.register(datasets, protocol_path, backend="mock")
+    export(protocol_path, tmp_path / "export", data_root=datasets)
+    attestation = read_holdout_exclusions(tmp_path / "export/prior-test-input-exclusions.json",
+                                          tmp_path / "export/prior-test-text-exclusions.json", "sst5")
+    root = Path(__file__).resolve().parents[1] / "examples/hierarchy/support"
+    source = HierarchySource.load(root / "source.json")
+    # Preserve the hierarchy fixture contract; add fields visible in new roots.
+    source.source.state["text"] = StateField(type="string", description="Test-only prior field")
+    source.graph.inputs["text"] = source.source.state["text"].model_copy(deep=True)
+    source_path, flat_path = tmp_path / "source.json", tmp_path / "flat.json"
+    atomic_json(source_path, source.model_dump(mode="json"))
+    template_program(source.source).save(flat_path)
+    split_paths = {}
+    prior = data.load_dataset(datasets / "sst5")[1]["test"][0].state["text"]
+    for split in data.SPLITS:
+        rows = [json.loads(line) for line in (root / f"{split}.jsonl").read_text().splitlines()]
+        for i, row in enumerate(rows):
+            row["state"]["text"] = f"unique new {split} {i}"
+        if split == "train":
+            rows[0]["state"]["text"] = prior if variant == "exact_extra_field" else "  " + prior.upper().replace(" ", "\t  ") + "  "
+        split_paths[split] = tmp_path / f"{split}.jsonl"
+        split_paths[split].write_text("".join(json.dumps(row) + "\n" for row in rows))
+    attestation.update(label_origin="independent_human_reviewed", reviewer="test-only-reviewer",
+                       test_independence_evidence="test-only synthetic review fixture")
+    output = tmp_path / "live.json"
+    with pytest.raises(DataError, match="input overlaps" if variant == "exact_extra_field" else "text overlaps"):
+        register(source_path, source_path, flat_path, split_paths, output,
+                 study_id="test_only_export_roundtrip", mode="typesafe", selected_method="dspy_gepa",
+                 structural_rounds=1, max_metric_calls=16, teacher_max_calls=3,
+                 teacher_model="test-only/model", data_attestation=attestation)
+    assert not output.exists()
+
+
+@pytest.mark.parametrize("fault", ["fields_missing", "protocol_mismatch", "normalization", "bad_hash"])
+def test_export_consumer_rejects_malformed_pairs_without_inference(tmp_path, fault):
+    from typewright.holdout_exclusions import read_holdout_exclusions
+
+    entry = {"n": 1, "manifest_sha256": "a" * 64, "declared_input_fields": ["text"],
+             "projected_input_sha256s": ["b" * 64]}
+    inputs = {"format": "systemone-prior-flat-test-input-exclusions/v1",
+              "source_protocol_sha256": "c" * 64, "tasks": {"sst5": entry}}
+    texts = {"format": "systemone-prior-flat-test-text-exclusions/v1",
+             "source_protocol_sha256": "c" * 64, "normalization": "casefold_whitespace_v1",
+             "tasks": {"sst5": {"n": 1, "manifest_sha256": "a" * 64,
+                                  "normalized_text_sha256s": ["d" * 64]}}}
+    if fault == "fields_missing":
+        entry.pop("declared_input_fields")
+    elif fault == "protocol_mismatch":
+        texts["source_protocol_sha256"] = "e" * 64
+    elif fault == "normalization":
+        texts["normalization"] = "none"
+    else:
+        entry["projected_input_sha256s"] = ["bad"]
+    atomic_json(tmp_path / "inputs.json", inputs)
+    atomic_json(tmp_path / "texts.json", texts)
+    with pytest.raises(DataError, match="Malformed or mismatched"):
+        read_holdout_exclusions(tmp_path / "inputs.json", tmp_path / "texts.json", "sst5")
