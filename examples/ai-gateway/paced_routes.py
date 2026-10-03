@@ -20,6 +20,23 @@ from parallel_backend import RoutedParallel
 PIN = "jev-1.13.0"
 # A hostile or buggy Retry-After must not freeze a whole route group indefinitely.
 MAX_COOLDOWN_SECONDS = 600
+# Proposed strict endpoint policy; live adoption requires endpoint-owner review.
+ROUTE_DESTINATIONS = {
+    "gateway-1": "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+    "gateway-2": "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
+    "beatapi": "https://api.beatapi.io/v1/systemone",
+    "opencode-zen": "https://opencode.ai/zen/v1/systemone",
+    "classifier": "https://classifier.dev/v1/systemone",
+}
+
+
+def validate_destination(name, url):
+    """Exact comparison rejects alternate hosts and URL parser normalization tricks."""
+    expected = ROUTE_DESTINATIONS.get(name)
+    if expected is None or type(url) is not str or url != expected:
+        # Never echo an untrusted URL: it may contain credentials or private data.
+        raise ConfigurationError("Route destination differs from the proposed exact HTTPS policy.")
+    return expected
 
 
 def retry_after(value, now=None):
@@ -149,13 +166,17 @@ class Native:
     synthetic = False
 
     def __init__(self, name, config, key):
+        validate_destination(name, config.get("url"))
         self.identity = name
-        self.config = config
+        self.config = dict(config)
         self.provider_attempts = 0
         self.providers = set()
-        self.client = httpx.Client(headers={"Authorization": "Bearer " + key}, timeout=60)
+        self.client = httpx.Client(
+            headers={"Authorization": "Bearer " + key}, timeout=60, follow_redirects=False
+        )
 
     def evaluate(self, program, state):
+        url = validate_destination(self.identity, self.config.get("url"))
         if program.model != PIN:
             raise BackendError("Unapproved program model.")
         payload = {
@@ -166,7 +187,7 @@ class Native:
         if self.identity.startswith("gateway-"):
             payload["providerOptions"] = {"gateway": {"only": ["typesafe-ai"]}}
         start = time.perf_counter()
-        response = self.client.post(self.config["url"], json=payload)
+        response = self.client.post(url, json=payload, follow_redirects=False)
         if response.status_code != 200:
             raise HTTPFailure(response)
         body = response.json()
@@ -396,6 +417,7 @@ def configurations(settings):
         }
         if i == 5:
             configs[name].update(questions_per_second=50, questions_per_minute=3000, questions_daily=20000)
+        validate_destination(name, configs[name]["url"])
     return configs
 
 
