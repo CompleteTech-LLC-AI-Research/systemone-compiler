@@ -64,7 +64,7 @@ rechecked quotes, the enforced cap, and the consents, then bind it with
 matches the protocol, the current software parameters, and the same teacher
 endpoint. See [the study guide](HIERARCHY_STUDY.md) for the exact commands.
 
-## Prepared proposal for issue #20
+## Prepared live proposal tracked in issue #74
 
 The 2026-09-30 local preparation retained 14,960 rows: 10,451 train, 917
 validation, 902 calibration, and 2,690 test. It excluded 484 rows without the
@@ -103,3 +103,8 @@ approved. Only train examples and train traces would be eligible for teacher
 sharing; validation, calibration, and test remain excluded. Selection approval
 does not authorize the held-out phase. The teacher's moving alias must be
 rechecked and recorded before selection; native Jev remains pinned.
+
+The 2026-10-03 owner decision separates delivered software in #20/#21 from the
+original live requirements retained in #74 and epic #6. The proposal above remains
+unapproved for execution. Closing the software trackers grants no spending, data
+sharing, semantic review or held-out test permission.
