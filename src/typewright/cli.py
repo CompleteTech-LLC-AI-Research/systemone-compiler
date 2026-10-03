@@ -109,6 +109,8 @@ def build_parser():
     compile_p.add_argument("--seed", type=int, default=7)
     compile_p.add_argument("--max-calibration-error", type=float, default=0.05)
     compile_p.add_argument("--min-calibration-samples", type=int, default=10)
+    compile_p.add_argument("--fit-decision-knobs", action="store_true",
+                           help="Opt in to offline flat Score-cut and Choice-weight fitting.")
     backend_args(compile_p)
     teacher_args(compile_p)
     run = sub.add_parser("run", help="Run a compiled JSON artifact. Does not execute application actions.")
@@ -130,7 +132,7 @@ def build_parser():
     demo = sub.add_parser("demo", help="No-key, no-network end-to-end synthetic smoke test.")
     demo.add_argument("--out", type=Path, default=Path("runs/demo"))
     demo.add_argument("--starter", choices=["flat", "hierarchy"], default="flat")
-    inspect_p = sub.add_parser("inspect", help="Validate artifact checksum and print its typed plan.")
+    inspect_p = sub.add_parser("inspect", help="Validate artifact checksum and print its typed plan, including fitted policy knobs.")
     inspect_p.add_argument("artifact", type=Path)
     harden = sub.add_parser("harden", help="Create robustness proposals that require human label review.")
     harden.add_argument("spec", type=Path)
@@ -209,6 +211,8 @@ def dispatch(args):
             splits = {name: read_hierarchy_jsonl(getattr(args, name), draft)
                       for name in ("train", "validation", "calibration", "test")}
             validate_hierarchy_compile_inputs(source, splits)
+            if args.fit_decision_knobs:
+                raise ConfigurationError("Decision-knob fitting currently supports flat programs only.")
             options = HierarchyCompileOptions(architect=args.architect, optimizer=args.optimizer,
                 structural_rounds=args.structural_rounds, max_metric_calls=args.max_metric_calls,
                 seed=args.seed, max_calibration_error=args.max_calibration_error,
@@ -238,7 +242,7 @@ def dispatch(args):
         options = CompileOptions(architect=args.architect, optimizer=args.optimizer,
             structural_rounds=args.structural_rounds, max_metric_calls=args.max_metric_calls,
             seed=args.seed, max_calibration_error=args.max_calibration_error,
-            min_calibration_samples=args.min_calibration_samples)
+            min_calibration_samples=args.min_calibration_samples, fit_decision_knobs=args.fit_decision_knobs)
         teacher = make_teacher(args) if (args.architect == "dspy" or args.optimizer == "gepa" or args.structural_rounds) else None
         backend = make_backend(args)
         try:

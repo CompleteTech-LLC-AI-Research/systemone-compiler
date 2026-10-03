@@ -23,8 +23,11 @@ class CompileOptions:
     seed: int = 7
     max_calibration_error: float = 0.05
     min_calibration_samples: int = 10
+    fit_decision_knobs: bool = False
 
     def __post_init__(self):
+        if type(self.fit_decision_knobs) is not bool:
+            raise ConfigurationError("fit_decision_knobs must be a boolean.")
         if self.architect not in {"template", "dspy"} or self.optimizer not in {"none", "gepa"}:
             raise ConfigurationError("Unknown architect or optimizer.")
         if not 0 <= self.structural_rounds <= 10:
@@ -106,7 +109,8 @@ class Compiler:
         _, calibration_predictions = evaluate(best, calibration, self.backend)
         best, calibration_fit = fit_policies(
             best, calibration, calibration_predictions,
-            max_error=options.max_calibration_error, min_samples=options.min_calibration_samples)
+            max_error=options.max_calibration_error, min_samples=options.min_calibration_samples,
+            fit_decision_knobs=options.fit_decision_knobs)
         fitted_predictions = [dict(r, decisions=apply_policy(best, r["answers"])) for r in calibration_predictions]
         calibration_report = report_from_results(best, calibration, fitted_predictions)
         best.provenance = {

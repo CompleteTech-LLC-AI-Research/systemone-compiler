@@ -2,9 +2,9 @@ from __future__ import annotations
 import math
 import re
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_serializer, model_validator
 
 from .errors import CandidateError, DataError
 from .io import atomic_json, fingerprint, load_document
@@ -107,6 +107,32 @@ class Policy(StrictModel):
     noul_threshold: float = Field(default=0.5, gt=0, lt=1)
     min_gate: float = Field(default=0.8, ge=0, le=1)
     force_review: bool = False
+    fitting_version: Literal["native-policy/v1"] | None = None
+    score_cuts: list[Annotated[float, Field(strict=True, ge=0)]] | None = None
+    choice_weights: dict[str, Annotated[float, Field(strict=True, gt=0)]] | None = None
+
+    @model_validator(mode="after")
+    def check_fitted_policy(self):
+        knobs = self.score_cuts is not None or self.choice_weights is not None
+        if knobs != (self.fitting_version is not None):
+            raise ValueError("Fitted knobs require an explicit native-policy/v1 version.")
+        if self.score_cuts is not None:
+            if not self.score_cuts or any(a >= b for a, b in zip(self.score_cuts, self.score_cuts[1:])):
+                raise ValueError("Score cuts must be nonempty and strictly ordered.")
+        if self.choice_weights is not None:
+            if not self.choice_weights or any(v <= 0 for v in self.choice_weights.values()):
+                raise ValueError("Choice weights must be positive.")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_compatible(self, handler):
+        # Omit absent extensions even in nested dumps: existing artifact bytes and
+        # content hashes retain their original meaning.
+        data = handler(self)
+        for key in ("fitting_version", "score_cuts", "choice_weights"):
+            if data.get(key) is None:
+                data.pop(key, None)
+        return data
 
 
 class Program(StrictModel):
@@ -132,6 +158,15 @@ class Program(StrictModel):
         used = set()
         for name, binding in self.bindings.items():
             decision = self.decisions[name]
+            policy = self.policies[name]
+            if policy.score_cuts is not None:
+                if decision.type != "score" or len(policy.score_cuts) != len(decision.criteria) - 1:
+                    raise ValueError("Score cuts must match the declared Score scale.")
+                if any(not 0 <= cut <= len(decision.criteria) - 1 for cut in policy.score_cuts):
+                    raise ValueError("Score cuts must lie within the declared scale.")
+            if policy.choice_weights is not None:
+                if decision.type != "choice" or set(policy.choice_weights) != set(decision.criteria):
+                    raise ValueError("Choice weights must match the fixed labels.")
             if binding.kind == "question":
                 if binding.question not in self.questions:
                     raise ValueError(f"Unknown question in binding {name}.")

@@ -59,7 +59,7 @@ budget-bounded, frozen artifact** that an application can run without DSPy.
 | Concern | DSPy 3.4 (experimental, per its docs and PRs) | Typewright |
 | --- | --- | --- |
 | Use Jev in a Python program | Yes: native client, async, and generative LMs mixed in one program. | Not its job. Jev only (mock and TypeSafe backends), no async. |
-| Tune decision knobs | `ReAnchor` fits Noul thresholds, Score cuts, and Choice weights. | Fits Noul thresholds and review gates. Score cuts and Choice weights are planned ([#92](https://github.com/Jev-Engineering/TypeWright/issues/92)). |
+| Tune decision knobs | `ReAnchor` fits Noul thresholds, Score cuts, and Choice weights. | Fits Noul thresholds and review gates; flat `compile --fit-decision-knobs` opts in to native Score cuts and Choice selection weights from cached calibration predictions. |
 | Search wording and structure | GEPA over instructions. Program decomposition (via generated code) is in an open upstream PR. | GEPA plus bounded structural proposals as validated JSON. No generated code. |
 | Held-out discipline | You supply the data; `ReAnchor` uses folds. | Four disjoint splits with leakage checks; test only after freeze. |
 | Review and abstention | None documented. | Fitted review gates with a minimum accepted count and an error constraint; `review_required` on every output. |
@@ -365,7 +365,9 @@ comparisons, paired cluster inference, and replayable evidence.
 **Implemented:** typed declarations and JSON artifacts; a native TypeSafe SDK
 adapter; DSPy synthesis and mutation; a standalone GEPA adapter; bounded
 add/drop/revise and numeric-decomposition proposals; validation-based selection;
-separate empirical policy fitting; projected inputs; request budgets; an optional
+separate empirical policy fitting, including optional native Score cuts and Choice
+selection weights from cached calibration predictions with flat
+`compile --fit-decision-knobs` (off by default); projected inputs; request budgets; an optional
 sensitive-output cache; reports; schema export; hardening proposals; a no-key
 fixture; the hierarchy v1 source and frozen-graph format with strict evidence
 replay; and a preregistered study runner.
@@ -373,7 +375,7 @@ replay; and a preregistered study runner.
 **Not claimed:** measured hierarchy accuracy gains; a completed independent live
 study; production certification; general multi-stage agent orchestration;
 arbitrary code generation; MIPRO integration; learned posterior calibration; a
-supervised weight fitter; automatic release approval; a TypeScript runtime;
+supervised composition-weight fitter; automatic release approval; a TypeScript runtime;
 pretrained weights; or a hosted service.
 
 The artifact stays JSON all the way down: no `eval`, generated Python, dynamic

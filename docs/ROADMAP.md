@@ -20,9 +20,11 @@ rather than capabilities claimed by the current release.
 3. **Richer policy and calibration.** Add task-level utility matrices, statistically
    justified selective-risk control, optional probability recalibration, and
    supervised composition-weight fitting with carefully isolated data. Fitting
-   Score cuts and Choice weights on the calibration split, where today only Noul
-   thresholds are fitted, is tracked in
-   [#92](https://github.com/Jev-Engineering/TypeWright/issues/92).
+   Score cuts and Choice selection weights is now implemented natively from cached
+   calibration predictions in flat programs, explicitly enabled with
+   `compile --fit-decision-knobs`, with conservative grouped five-fold checks and an
+   explicit unchanged result (#92; owner approved native fitting for #95).
+   This is not posterior calibration or a measured gain.
 4. **Scale and operations.** Async batched evaluation, explicitly authorized retry
    accounting, drift monitoring, signed artifact attestations, and a separately
    reviewed TypeScript runtime. Resumable non-pickle records already exist for

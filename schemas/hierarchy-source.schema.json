@@ -390,6 +390,51 @@
           "default": false,
           "title": "Force Review",
           "type": "boolean"
+        },
+        "fitting_version": {
+          "anyOf": [
+            {
+              "const": "native-policy/v1",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fitting Version"
+        },
+        "score_cuts": {
+          "anyOf": [
+            {
+              "items": {
+                "minimum": 0,
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Score Cuts"
+        },
+        "choice_weights": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "exclusiveMinimum": 0,
+                "type": "number"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choice Weights"
         }
       },
       "title": "Policy",
