@@ -63,3 +63,12 @@ The source release intentionally uses a standalone GEPA adapter rather than
 pretending Jev provides a general text-generation API. No upstream performance
 claim is asserted for this framework. Metrics from the bundled fixture are
 synthetic software test output only.
+
+## Compile-only native client review, 2026-10-03
+
+- Exact-version upstream TypeSafe hooks: https://github.com/stanfordnlp/dspy/blob/3.4.0/dspy/clients/typesafe.py
+- Native Jev tutorial: https://dspy.ai/current/tutorials/jev_decisions/
+
+The wrapper is qualified against installed DSPy 3.4.0 and SDK 0.7.0 with
+socket-forbidden native doubles. Direct SDK frozen execution is retained by
+owner decision. No live inference, data sharing or measured gain follows.

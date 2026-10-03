@@ -37,12 +37,15 @@ def _optimize():
     return data["project"]["optional-dependencies"]
 
 
-def test_optimize_extra_declares_the_verified_dspy_range_and_pinned_gepa():
+def test_extras_declare_verified_teacher_range_and_native_compile_profile():
+    extras = _optimize()
+    assert "dspy[litellm]>=3.3.1,<3.5" in extras["optimize"]
+    assert "dspy[typesafe]==3.4.0" in extras["compile"]
+    assert "typesafe-sdk==0.7.0" in extras["compile"]
+    assert "dspy[litellm,typesafe]==3.4.0" in extras["all"]
+    assert "typesafe-sdk==0.7.0" in extras["all"]
     for name in ("optimize", "all"):
-        extra = _optimize()[name]
-        assert "dspy[litellm]>=3.3.1,<3.5" in extra, name
-        assert "gepa==0.1.4" in extra, name
-    assert not any(r.startswith("dspy[litellm]==") for name in ("optimize", "all") for r in _optimize()[name])
+        assert "gepa==0.1.4" in extras[name], name
 
 
 @pytest.mark.optional

@@ -54,8 +54,13 @@ def make_backend(args):
         raise ConfigurationError("Choose --cache or --no-cache, not both.")
     if args.max_calls < 1 or args.request_timeout <= 0:
         raise ConfigurationError("Request budget and timeout must be positive.")
-    provider = MockBackend() if args.backend == "mock" else TypeSafeBackend(
-        allow_paid=args.allow_paid, timeout=args.request_timeout)
+    if args.backend == "mock":
+        provider = MockBackend()
+    elif getattr(args, "command", None) == "compile":
+        from .dspy_typesafe_backend import DSPyTypeSafeBackend
+        provider = DSPyTypeSafeBackend(allow_paid=args.allow_paid, timeout=args.request_timeout)
+    else:
+        provider = TypeSafeBackend(allow_paid=args.allow_paid, timeout=args.request_timeout)
     cache = None if args.no_cache else AnswerCache(args.cache)
     return ManagedBackend(provider, max_calls=args.max_calls, cache=cache)
 

@@ -332,8 +332,13 @@ def plan(splits, seeds, search_calls, proposals, max_chars):
             "matching_note": "Equal budget ceilings, not equal realized tokens or proposal counts. Report actual use."}
 
 
-def make_backend(live, limit):
-    return ManagedBackend(TypeSafeBackend(allow_paid=True) if live else MockBackend(), max_calls=limit, cache=None)
+def make_backend(live, limit, *, compile_time=False):
+    if live and compile_time:
+        from .dspy_typesafe_backend import DSPyTypeSafeBackend
+        provider = DSPyTypeSafeBackend(allow_paid=True)
+    else:
+        provider = TypeSafeBackend(allow_paid=True) if live else MockBackend()
+    return ManagedBackend(provider, max_calls=limit, cache=None)
 
 
 def select_experiment(source, splits, dataset, out, *, seeds, search_calls, proposals,
@@ -539,7 +544,7 @@ def main(argv=None):
     if args.command == "select" and live and (not args.share_feedback or not args.teacher_model):
         parser.error("Live selection also requires --share-feedback and an explicit --teacher-model")
     def backend_factory(limit):
-        return make_backend(live, limit)
+        return make_backend(live, limit, compile_time=args.command == "select")
     if args.command == "select":
         def teacher_factory(limit):
             return DSPyTeacher(args.teacher_model, allow_paid=True, share_feedback=True, max_calls=limit,

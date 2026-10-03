@@ -7,7 +7,8 @@ Documentation inspection date: **2026-09-19**. These are the implementation targ
 | Python | >=3.11 | Core library, CLI, tests. |
 | TypeSafe SDK | `typesafe-sdk==0.7.0` | Native `TypeSafeClient.system_one`. |
 | Target model | `jev-1.13.0` | Versioned ID, not a moving alias. |
-| DSPy | `dspy[litellm]>=3.3.1,<3.5` (verified: 3.3.1 and 3.4.0) | `Signature`, `Predict`, explicit teacher `LM/context`. |
+| DSPy teacher | `dspy[litellm]>=3.3.1,<3.5` (verified: 3.3.1 and 3.4.0) | `Signature`, `Predict`, explicit teacher `LM/context`. |
+| Native compile client | `dspy[typesafe]==3.4.0`, SDK 0.7.0 (`compile` extra) | Experimental TypeSafe wrapper; absent from frozen runtime. |
 | GEPA | `gepa==0.1.4` | Standalone adapter and custom component proposer. |
 
 These are not claims that all dependencies were installed or live-tested in the
@@ -21,20 +22,22 @@ installing an arbitrary newest version.
 The supported range is `>=3.3.1,<3.5`, with `gepa==0.1.4` pinned (DSPy 3.4.0 resolves
 the same GEPA). Only 3.3.1 and 3.4.0 were exercised; later 3.4.x patch releases are
 accepted by the range but unverified. The upper bound is evidence-based: DSPy 3.4
-deprecates overriding `BaseLM.forward()` (which the teacher meter does) and schedules
-its removal in 3.5. See `BUILD_REPORT.md` for the executed results.
+deprecates overriding `BaseLM.forward()` and schedules its removal in 3.5.
+The #93 replacement uses the supported engine on 3.4; only the supported 3.3
+legacy branch still meters forward. See `BUILD_REPORT.md` for the executed results.
 
 - Engine: DSPy 3.4 `engine="auto"` prefers native lm15 execution. The native response
   has no LiteLLM `_hidden_params`, so the teacher's SDK cost estimate would silently
-  become "unknown". `DSPyTeacher` therefore passes `engine="litellm"` whenever
-  `dspy.LM` accepts `engine` (3.3.x has no such argument and always uses LiteLLM).
+  become "unknown". the #90 checkpoint therefore selected `engine="litellm"`. The #93 engine now
+  observes the raw LiteLLM response before conversion (3.3 retains its legacy path).
 - Unchanged in 3.4.0 (checked offline against a loopback test double): caches off,
   `disable_history=True` leaves no history, signature-call and LM-forward ceilings count,
   `S1_TEACHER_API_BASE`/`S1_TEACHER_API_KEY` reach the request, consent flags are untouched.
 - Pydantic: `dspy` 3.4.0 itself requires `pydantic>=2.11.0`, so the `optimize` extra
   resolves to it automatically. The base install stays `pydantic>=2.10,<3`.
-- Not covered: `dspy[typesafe]`, `TypeSafe`/`Noul`/`Choice`/`Score` decision types and
-  `ReAnchor` are not used or tested here.
+- The #90 checkpoint did not cover the native DSPy client. The #91 qualification
+  below covers raw native transport, not DSPy Predict decision-type translation
+  or ReAnchor. Those remain unused.
 - The documentation inspection date above was not changed; this verification used the
   installed packages, not a fresh read of the primary documentation.
 
@@ -121,3 +124,42 @@ the pinned `jev-1.13.0` only under the operator's own equivalence confirmation,
 not an independent attestation.
 Unexpected returned model identities fail. None of these routes has been verified
 live in this repository. See `examples/ai-gateway/README.md` for caps and setup.
+
+## Compile-only TypeSafe qualification (#91)
+
+Owner decision on 2026-10-03: use the DSPy client for native compile-time
+evaluation and retain the direct SDK for frozen runtime. Install
+`python -m pip install -e '.[compile]'`; combine with `optimize` when a generative
+teacher/GEPA is required. The teacher's 3.3.1 floor remains supported independently;
+the experimental native wrapper refuses all versions except DSPy 3.4.0 and
+typesafe-sdk 0.7.0. This deliberately fails closed on unverified patch releases.
+
+Gap analysis against actual pinned upstream code, rechecked 2026-10-03:
+
+| Upstream behavior | Qualified wrapper |
+| --- | --- |
+| Defaults to `jev-latest`; no returned-model equality check | Versioned explicit model; ManagedBackend validates exact returned identity. |
+| SDK kwargs omit RetryPolicy (SDK default is two retries) | Explicit RetryPolicy(max_retries=0), fixed timeout. |
+| Cache defaults on; history may retain raw state/questions/response | Per-client cache off; history/callbacks/tracker disabled; no upstream response retention. |
+| Response mapping drops Score legend; public result drops model/usage envelope | Raw native dictionaries and full SDK JSON envelope preserved. |
+| No paid consent or our attempt ledger | Explicit allow_paid; ManagedBackend pre-dispatch budget/cache/identity and per-leaf reservations/settlement. |
+| No billed cost evidence | Dollar cost remains null. |
+
+The wrapper uses exact-version experimental `_sdk_kwargs`, `_response` and
+`_finish` hooks. Native client traffic never goes through a generative Predict
+program. Compile CLI and flat/hierarchy research selection choose this backend;
+frozen run, evaluate and held-out study phases use the direct SDK. Callers of
+the Python compiler explicitly supply their backend. The direct SDK backend is
+retained for runtime, rather than deprecated away. The live hierarchy manifest
+binds separate compile and runtime identities; the code/manifest change needs
+a fresh digest-bound review before paid selection. It cannot revive old consent.
+
+Installed-package socket-forbidden doubles verify payload/envelope equivalence,
+real SDK constructor arguments, consent/version/model refusal, zero retries,
+cache/attempt accounting, chain/conditional/diamond/nested graph receipts,
+interrupted resume and zero-dispatch replay. These are offline mechanics, not
+live inference, authenticity, measured gains or production qualification.
+
+Primary sources: [pinned TypeSafe client](https://github.com/stanfordnlp/dspy/blob/3.4.0/dspy/clients/typesafe.py),
+[official Jev tutorial](https://dspy.ai/current/tutorials/jev_decisions/),
+[SDK usage](https://docs.typesafe.ai/sdk/python/usage).
