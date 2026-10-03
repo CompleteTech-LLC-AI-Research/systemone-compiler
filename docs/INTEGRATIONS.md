@@ -59,7 +59,16 @@ server behavior.
 DSPy creates three structured teacher programs (`Design`, `HierarchyDesign`, and `Revise`) using
 `dspy.Signature`, `InputField`, `OutputField`, and `Predict`. Inference occurs in
 `dspy.context(lm=..., disable_history=True)`. Cache use and automatic retry arguments are explicitly
-configured. Signature calls and LM-forward attempts have separate ceilings.
+configured. Signature calls and provider-request attempts have separate ceilings.
+DSPy 3.4 uses a custom `complete(Request) -> Response` engine that admits each
+attempt before dispatch and observes raw LiteLLM model, usage and SDK cost metadata
+before canonical conversion. The outer engine deliberately exposes no
+`complete_legacy` hook: that transition hook bypasses `complete` during ordinary
+`Predict` calls. DSPy 3.3 retains its supported legacy forward branch; DSPy 3.4
+does not override `forward`. The supported range remains `<3.5` pending verification.
+Endpoint, key and timeout overrides belong to the custom engine. Both branches
+disable SDK retries and caches. Typed budget and response-identity failures remain
+failures across DSPy's error boundary, including adapter fallback.
 Model-specific restrictions on temperature, tokens, supported output
 formats, or provider model IDs may still need local adjustment.
 
