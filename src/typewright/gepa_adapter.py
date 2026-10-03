@@ -115,11 +115,15 @@ class JevGEPAAdapter:
         return result
 
     def propose_new_texts(self, candidate, reflective_dataset, components_to_update):
+        if (not isinstance(candidate, dict) or not components_to_update or
+                any(key not in candidate or key not in components_from_program(self.program)
+                    for key in components_to_update)):
+            raise CandidateError("Proposal requested a missing or unknown text component.")
         if fingerprint(reflective_dataset) not in self._issued_reflections:
             raise DataError("Teacher reflection was not built from registered train traces.")
         try:
             proposed = self.teacher.propose_components(candidate, reflective_dataset, components_to_update)
-            if set(proposed) != set(components_to_update):
+            if not isinstance(proposed, dict) or set(proposed) != set(components_to_update):
                 raise CandidateError("Proposer changed unrequested component keys.")
             merged = {**candidate, **proposed}
             program_from_components(self.program, merged)

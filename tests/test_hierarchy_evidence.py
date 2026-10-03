@@ -466,3 +466,66 @@ def test_unwritable_owner_lock_reports_configuration_error_without_dispatch(tmp_
     assert isinstance(caught.value.__cause__, PermissionError)
     assert backend.calls == []
     assert {path: path.read_bytes() for path in paths} == before
+
+
+@pytest.mark.parametrize("mode", ["replay", "resume"])
+def test_real_readonly_owner_lock_fails_without_dispatch(tmp_path, mode):
+    import os
+
+    if os.name != "posix" or os.geteuid() == 0:
+        pytest.skip("POSIX permission enforcement requires an unprivileged user")
+    state, directory, _ = _completed_evidence(tmp_path)
+    before = {path.name: path.read_bytes() for path in directory.iterdir()}
+    lock = directory / ".owner.lock"
+    lock.chmod(0o400)
+    directory.chmod(0o500)
+    backend = Recording()
+    try:
+        with pytest.raises(ConfigurationError, match="writable lock file") as caught:
+            runtime(backend=backend).run(state, evidence_dir=directory, evidence_mode=mode)
+        assert isinstance(caught.value.__cause__, PermissionError)
+        assert backend.calls == []
+        assert {path.name: path.read_bytes() for path in directory.iterdir()} == before
+    finally:
+        directory.chmod(0o700)
+        lock.chmod(0o600)
+
+
+def test_create_lock_open_failure_preserves_concurrent_content(tmp_path, monkeypatch):
+    import os
+
+    directory = tmp_path / "new-evidence"
+    chmod = os.chmod
+
+    def inject_conflicting_lock(path, mode):
+        chmod(path, mode)
+        if path == directory:
+            (directory / ".owner.lock").mkdir()  # Real filesystem EISDIR.
+
+    monkeypatch.setattr(os, "chmod", inject_conflicting_lock)
+    backend = Recording()
+    with pytest.raises(ConfigurationError, match="Cannot create") as caught:
+        runtime(backend=backend).run(CASES["chain.json"]["state"], evidence_dir=directory)
+    assert isinstance(caught.value.__cause__, IsADirectoryError)
+    assert (directory / ".owner.lock").is_dir()
+    assert backend.calls == []
+
+
+def test_real_create_lock_permission_failure_removes_empty_directory(tmp_path, monkeypatch):
+    import os
+
+    if os.name != "posix" or os.geteuid() == 0:
+        pytest.skip("POSIX permission enforcement requires an unprivileged user")
+    directory = tmp_path / "new-readonly-evidence"
+    chmod = os.chmod
+
+    def readonly(path, mode):
+        chmod(path, 0o500 if path == directory else mode)
+
+    monkeypatch.setattr(os, "chmod", readonly)
+    backend = Recording()
+    with pytest.raises(ConfigurationError, match="Cannot create") as caught:
+        runtime(backend=backend).run(CASES["chain.json"]["state"], evidence_dir=directory)
+    assert isinstance(caught.value.__cause__, PermissionError)
+    assert not directory.exists()
+    assert backend.calls == []

@@ -163,3 +163,32 @@ def test_dspy_bad_component_keys_rejected():
     with pytest.raises(CandidateError):
         teacher.propose_components({"flag/instructions": '"Check it"'}, {}, ["flag/instructions"])
     assert teacher.rejected == 1
+
+
+def test_flat_missing_candidate_key_fails_before_fallback(program, backend, splits):
+    teacher = FixedTeacher()
+    adapter = JevGEPAAdapter(program, backend, teacher, batch_factory=Batch, train_rows=splits["train"])
+    candidate = components_from_program(program)
+    key = "urgent/instructions"
+    candidate.pop(key)
+    batch = adapter.evaluate(splits["train"][:1], candidate, capture_traces=True)
+    reflection = adapter.make_reflective_dataset(candidate, batch, [key])
+    with pytest.raises(CandidateError, match="missing or unknown"):
+        adapter.propose_new_texts(candidate, reflection, [key])
+
+
+@pytest.mark.parametrize("key,hierarchy", [("flag/instructions", False),
+                                           ("graph/router/question/flag/instructions", True)])
+def test_revision_rules_are_scoped_to_component_execution_model(key, hierarchy):
+    teacher = object.__new__(DSPyTeacher)
+    teacher.rejected, teacher.revise = 0, object()
+    captured = {}
+
+    def predict(*_args, **kwargs):
+        captured.update(kwargs)
+        return types.SimpleNamespace(revised_components_json=json.dumps({key: "Inspect evidence"}))
+
+    teacher._predict = predict
+    teacher.propose_components({key: '"Inspect evidence"'}, {}, [key])
+    assert ("Hierarchy stages" in captured["rules"]) is hierarchy
+    assert "Questions within one native request are independent" in captured["rules"]
