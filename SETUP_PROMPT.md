@@ -98,6 +98,12 @@ the README's one-request draft smoke check with `--backend typesafe --allow-paid
 model, and usage without exposing credentials. Do not silently substitute mock
 results when live calls fail.
 
+Native compile/selection uses the experimental DSPy TypeSafe wrapper, qualified
+with DSPy 3.4.0 and SDK 0.7.0. Install `.[compile,optimize]` for live optimization;
+the generative teacher independently retains its supported 3.3.1 floor. Frozen
+runtime remains the direct SDK (`.[live]`) with no DSPy import. Offline transport
+equivalence is not authentication or live provider evidence.
+
 Live DSPy/GEPA optimization additionally needs an explicitly selected real teacher
 model and provider credentials, permission to send the projected training data to
 that provider, four disjoint splits, and agreed request/signature/token budgets.

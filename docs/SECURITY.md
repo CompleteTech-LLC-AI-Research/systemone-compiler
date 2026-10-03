@@ -3,6 +3,16 @@
 ## Data flows
 
 A native TypeSafe request contains the projected state and all compiled questions.
+Compile/selection uses the qualified DSPy TypeSafe wrapper; frozen and held-out
+execution uses the direct SDK. The wrapper preserves native dictionaries and the
+full response identity, sets SDK retries to zero and disables upstream cache,
+history, callbacks and usage tracking. It does not route native state through a
+generative teacher. Entrypoints and provider backends enforce explicit consent;
+`ManagedBackend` owns pre-dispatch reservations, cache identity and evidence
+settlement on both paths. Experimental DSPy hooks
+are guarded to exactly 3.4.0 with SDK 0.7.0; drift fails closed. A reviewed live
+hierarchy manifest now binds separate compile and runtime backend identities,
+so an old manifest cannot approve the changed selection path by accident.
 A DSPy teacher call contains the source declaration, current plan/components, and
 selected projected training examples or training error traces with labels. The
 teacher may therefore see sensitive task data. Consent to TypeSafe is not assumed

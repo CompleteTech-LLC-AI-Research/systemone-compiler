@@ -73,6 +73,21 @@ and limits are copied by the compiler, then the full graph is validated.
 `Revise` updates requested instruction/rubric entries. All use `dspy.Predict` inside an explicit
 `dspy.context(lm=...)`. A user-selected teacher provider is mandatory.
 
+The owner-approved native evaluation boundary is separate from that generative
+teacher. Compile and selection entrypoints use `DSPyTypeSafeBackend`, a lazy
+compile-only wrapper over `dspy.experimental.TypeSafe`, qualified against exactly
+DSPy 3.4.0 and SDK 0.7.0. It passes raw native question dictionaries and retains
+the complete SDK response envelope, including model, usage and Score legend;
+it disables retries, upstream caches, history, callbacks and usage tracking.
+`ManagedBackend` remains the sole pre-dispatch budget, identity, cache and leaf
+receipt owner. Unknown cost remains null. Frozen execution and held-out research
+requests use the direct `TypeSafeBackend`; importing or executing a frozen
+program never imports DSPy. Both paths have offline native payload/response and
+hierarchy reservation, settlement, resume and replay equivalence tests. Private
+experimental hooks require the exact version guard; they are not live
+qualification. Callers injecting a backend into the Python compiler retain
+ownership of that explicit choice.
+
 Standalone GEPA receives a candidate mapping `str -> str`. Each value is the JSON
 encoding of a TypeSafe entry; the entry itself may be a string, object, list, or
 null. Keys identify question instructions and indexed criteria/Score levels.

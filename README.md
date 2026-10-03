@@ -48,6 +48,14 @@ flowchart LR
 DSPy and GEPA are used only at compile time. Importing `typewright` or running a
 frozen program does not import either of them.
 
+Native `compile --backend typesafe` and research selection use the experimental
+DSPy TypeSafe wrapper qualified with **DSPy 3.4.0 / SDK 0.7.0**. Install
+`.[compile]` (and `.[optimize]` for the generative teacher/GEPA). Frozen `run`,
+evaluation and held-out research execution retain the direct SDK backend and
+need only `.[live]`. This owner-approved boundary keeps DSPy out of runtime;
+offline equivalence tests do not establish live provider operation. Programmatic
+compilers can explicitly supply `DSPyTypeSafeBackend` to `ManagedBackend`.
+
 ## Where Typewright fits
 
 DSPy 3.4 added experimental, native Jev support: a `TypeSafe` client behind the
@@ -72,7 +80,7 @@ experimental upstream features that may change. Typewright's structural search a
 hierarchies are implemented but **not yet shown to improve accuracy**; the checks
 above are about process and safety, not measured gains. Planned alignment with
 DSPy: compatibility verification ([#90](https://github.com/Jev-Engineering/TypeWright/issues/90))
-and evaluating DSPy's Jev adapter at compile time ([#91](https://github.com/Jev-Engineering/TypeWright/issues/91)).
+and the qualified compile-only DSPy Jev adapter ([#91](https://github.com/Jev-Engineering/TypeWright/issues/91)).
 
 ## Quickstart
 

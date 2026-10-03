@@ -396,6 +396,11 @@ def test_live_manifest_proposal_pins_every_run_parameter_without_calls(tmp_path,
     assert proposal["native_backend"]["identity"] == "typesafe-sdk/0.7.0"
     assert proposal["native_backend"]["sdk_retries"] == 0
     assert proposal["native_backend"]["credential"]["recorded_in_manifest"] is False
+    assert proposal["compile_backend"] == {
+        "identity": "dspy-typesafe/3.4.0+typesafe-sdk/0.7.0",
+        "dspy_version": "3.4.0", "sdk_version": "0.7.0",
+        "sdk_retries": 0, "framework_cache": "disabled", "request_timeout_s": 60.0,
+    }
     assert proposal["teacher"]["model"] == "test-only/model"
     assert proposal["teacher"]["api_base"] == "provider_default"
     assert proposal["teacher"]["credential"]["recorded_in_manifest"] is False
@@ -462,6 +467,47 @@ def test_live_manifest_review_binds_exact_digest_and_every_attestation(tmp_path)
     assert reviewed["selection_executed"] is False and reviewed["test_executed"] is False
     assert reviewed["deployment_approved"] is False
     assert study._envelope_read(tmp_path / "complete-reviewed.json") == reviewed
+
+
+@pytest.mark.parametrize("change", ["missing", "identity", "dspy_version", "sdk_version",
+                                   "sdk_retries", "framework_cache", "request_timeout_s"])
+def test_live_selection_rejects_obsolete_compile_manifest_before_backend_creation(tmp_path, change):
+    import copy
+    from typewright.io import fingerprint
+
+    protocol_path, protocol = _live_test_double_protocol(tmp_path)
+    proposal = study.propose_live_manifest(protocol_path, tmp_path / "manifest.json")
+    obsolete = copy.deepcopy(proposal)
+    if change == "missing":
+        del obsolete["compile_backend"]
+    else:
+        obsolete["compile_backend"][change] = {
+            "identity": "typesafe-sdk/0.7.0", "dspy_version": "3.3.1",
+            "sdk_version": "0.6.0", "sdk_retries": 2,
+            "framework_cache": "enabled", "request_timeout_s": 10.0,
+        }[change]
+    # The old parameters have an internally consistent review and checksums.
+    # Rejection must compare current execution parameters, not merely their digest.
+    reviewed_path = tmp_path / "obsolete-reviewed.json"
+    study._envelope_write(reviewed_path, {
+        "format": study.LIVE_MANIFEST_REVIEWED_FORMAT,
+        "proposal": obsolete, "manifest_sha256": fingerprint(obsolete),
+        "review": _completed_review(obsolete),
+    })
+    constructions = []
+
+    def forbidden_backend(*args):
+        constructions.append(args)
+        raise AssertionError("Obsolete consent must fail before backend creation")
+
+    output = tmp_path / "selection"
+    with pytest.raises(ConfigurationError, match="Reviewed live manifest differs"):
+        select_and_freeze(protocol_path, output, allow_paid=True, share_feedback=True,
+                          approved_protocol_sha256=fingerprint(protocol),
+                          reviewed_manifest=reviewed_path, teacher=object(),
+                          backend_factory=forbidden_backend)
+    assert constructions == []
+    assert not output.exists()
 
 
 def test_live_selection_requires_matching_reviewed_manifest_before_any_provider(tmp_path, monkeypatch):

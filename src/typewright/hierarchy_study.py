@@ -378,6 +378,7 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
                                  "make no paid calls.")
     import inspect
     from .architect import DSPyTeacher
+    from .dspy_typesafe_backend import DSPyTypeSafeBackend
     teacher_defaults = inspect.signature(DSPyTeacher.__init__).parameters
     backend_defaults = inspect.signature(TypeSafeBackend.__init__).parameters
     optimization = protocol["optimization"]
@@ -404,6 +405,10 @@ def _live_manifest_proposal(protocol: dict[str, Any], source: HierarchySource) -
                            "request_timeout_s": backend_defaults["timeout"].default,
                            "credential": {"environment_variable": "TYPESAFE_API_KEY",
                                           "recorded_in_manifest": False}},
+        "compile_backend": {"identity": DSPyTypeSafeBackend.identity,
+                            "dspy_version": "3.4.0", "sdk_version": "0.7.0",
+                            "sdk_retries": 0, "framework_cache": "disabled",
+                            "request_timeout_s": backend_defaults["timeout"].default},
         "teacher": {"model": optimization["teacher_model"],
                     "signature_ceiling": optimization["teacher_max_calls"],
                     "provider_request_ceiling": protocol["budgets"]["teacher_provider_request_ceiling"],
@@ -546,7 +551,12 @@ def _study_backend(protocol: dict[str, Any], arm: str, *, phase: str,
     elif protocol["mode"] == "mock":
         backend = ManagedBackend(MockBackend(), max_calls=ceiling, cache=None)
     else:
-        backend = ManagedBackend(TypeSafeBackend(allow_paid=allow_paid), max_calls=ceiling, cache=None)
+        if phase == "selection":
+            from .dspy_typesafe_backend import DSPyTypeSafeBackend
+            provider = DSPyTypeSafeBackend(allow_paid=allow_paid)
+        else:
+            provider = TypeSafeBackend(allow_paid=allow_paid)
+        backend = ManagedBackend(provider, max_calls=ceiling, cache=None)
     if backend.synthetic != (protocol["mode"] == "mock") or backend.budget.maximum != ceiling:
         raise ConfigurationError("Study backend identity or request ceiling differs from the protocol.")
     return backend

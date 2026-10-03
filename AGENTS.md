@@ -4,6 +4,9 @@
 
 - This is a compiler/runtime library. DSPy and GEPA belong to compile time.
   Importing `typewright` or running a frozen program must not import either.
+  Native compile-time evaluation uses the qualified DSPy TypeSafe wrapper;
+  frozen execution retains the direct SDK backend. The owner approved this
+  boundary on 2026-10-03; do not move DSPy into frozen execution.
 - Target Jev's native typed API. Choice probabilities, Noul P(true), Score
   expectations, and vendor confidence are distinct values.
 - Keep the source contract fixed: output names/types, Choice labels, Score scale

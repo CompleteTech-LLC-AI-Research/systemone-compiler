@@ -146,7 +146,7 @@ def select(protocol, out, *, backend_factory=None, teacher_factory=None, data_ro
     if out.exists():
         raise ConfigurationError("Choose a fresh selection directory.")
     live = protocol["backend"] == "typesafe"
-    backend_factory = backend_factory or (lambda n: make_backend(live, n))
+    backend_factory = backend_factory or (lambda n: make_backend(live, n, compile_time=True))
     teacher_factory = teacher_factory or (lambda n: AuditedDSPyTeacher(protocol["teacher_model"], allow_paid=True,
         share_feedback=True, max_calls=n, max_tokens=protocol["teacher_max_output_tokens"],
         expected_response_model=protocol["teacher_response_model"],
