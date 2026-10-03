@@ -304,3 +304,163 @@ def test_every_gateway_route_including_one_and_two_needs_its_enable_flag():
     assert list(enabled) == ["direct", "gateway-1", "gateway-2"]
     only_two = r.configurations({"AI_GATEWAY_ROUTE_2_ENABLED": "true"})
     assert list(only_two) == ["direct", "gateway-2"]
+
+
+UNSAFE_DESTINATIONS = [
+    "http://api.beatapi.io/v1/systemone",
+    "https://unapproved.example/v1/systemone",
+    "https://api.beatapi.io.attacker.example/v1/systemone",
+    "https://fake-user:fake-secret@api.beatapi.io/v1/systemone",
+    "https://api.beatapi.io:443/v1/systemone",
+    "https://api.beatapi.io/v1/systemone?secret=fake",
+    "https://api.beatapi.io/v1/systemone#fragment",
+    "https://api.beatapi.io/v1/systemone?",
+    "https://api.beatapi.io/v1/systemone#",
+    "https://api.beatapi.io/v1/systemone/",
+    "https://api.beatapi.io/v1/../v1/systemone",
+    "https://api.beatapi.io/v1/%73ystemone",
+    "https://API.BEATAPI.IO/v1/systemone",
+    "https://api.beatapi.io./v1/systemone",
+    " https://api.beatapi.io/v1/systemone",
+    "https://api.beatapi.io/v1/systemone\n",
+    "https://api.beatapi.io\\@unapproved.example/v1/systemone",
+    "https://127.0.0.1/v1/systemone",
+    "https://[::1]/v1/systemone",
+    "https://api.beatapi.io:bad/v1/systemone",
+    "not-a-url", "", None,
+]
+
+
+@pytest.mark.parametrize("url", UNSAFE_DESTINATIONS)
+def test_unsafe_destination_rejected_before_client_construction(monkeypatch, url):
+    called = []
+    monkeypatch.setattr(r.httpx, "Client", lambda **kwargs: called.append(kwargs))
+    with pytest.raises(r.ConfigurationError, match="exact HTTPS policy") as exc:
+        r.Native("beatapi", {"url": url, "model": "jev-1.13-free"}, "fake-test-key")
+    assert called == []
+    assert "fake-secret" not in str(exc.value)
+    assert "unapproved.example" not in str(exc.value)
+
+
+@pytest.mark.parametrize("route,name", [(3, "beatapi"), (4, "opencode-zen"), (5, "classifier")])
+def test_settings_reject_destination_for_wrong_route(route, name):
+    settings = {
+        f"AI_GATEWAY_ROUTE_{route}_ENABLED": "true",
+        f"AI_GATEWAY_ROUTE_{route}_MODEL": r.PIN if route == 5 else "jev-1.13-free",
+        f"AI_GATEWAY_ROUTE_{route}_SYSTEMONE_URL": r.ROUTE_DESTINATIONS["gateway-1"],
+    }
+    with pytest.raises(r.ConfigurationError):
+        r.configurations(settings)
+    settings[f"AI_GATEWAY_ROUTE_{route}_SYSTEMONE_URL"] = r.ROUTE_DESTINATIONS[name]
+    assert r.configurations(settings)[name]["url"] == r.ROUTE_DESTINATIONS[name]
+
+
+def test_proposed_destinations_match_public_example():
+    settings = r.dotenv_values(Path(r.__file__).parent / ".env.example")
+    for route, name in [(3, "beatapi"), (4, "opencode-zen"), (5, "classifier")]:
+        assert settings[f"AI_GATEWAY_ROUTE_{route}_SYSTEMONE_URL"] == r.ROUTE_DESTINATIONS[name]
+
+
+@pytest.mark.parametrize("url", UNSAFE_DESTINATIONS)
+def test_mutated_destination_rejected_before_state_serialization_or_transport(monkeypatch, url):
+    calls = []
+    original_client = httpx.Client
+    monkeypatch.setattr(r.httpx, "Client", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(lambda request: calls.append(request)), **kwargs
+    ))
+    config = {"url": r.ROUTE_DESTINATIONS["beatapi"], "model": "jev-1.13-free"}
+    backend = r.Native("beatapi", config, "fake-test-key")
+    try:
+        config["url"] = url
+        assert backend.config["url"] == r.ROUTE_DESTINATIONS["beatapi"]
+        backend.config["url"] = url
+        # No program/state access is needed before rejecting destination drift.
+        with pytest.raises(r.ConfigurationError):
+            backend.evaluate(None, object())
+        assert calls == []
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("name", list(r.ROUTE_DESTINATIONS))
+def test_exact_destination_dispatch_with_local_transport(monkeypatch, name):
+    import json
+    calls = []
+    model = "typesafe-ai/jev" if name.startswith("gateway-") else (
+        r.PIN if name == "classifier" else "jev-1.13-free"
+    )
+
+    def respond(request):
+        calls.append(request)
+        return httpx.Response(200, json={"answers": {}, "model": model})
+
+    original_client = httpx.Client
+    monkeypatch.setattr(r.httpx, "Client", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(respond), **kwargs
+    ))
+    backend = r.Native(name, {"url": r.ROUTE_DESTINATIONS[name], "model": model}, "fake-test-key")
+    try:
+        response = backend.evaluate(SimpleNamespace(model=r.PIN, questions={}), {"fixture": "synthetic"})
+        assert response.model == model
+        assert len(calls) == 1
+        assert str(calls[0].url) == r.ROUTE_DESTINATIONS[name]
+        assert calls[0].headers["authorization"] == "Bearer fake-test-key"
+        assert json.loads(calls[0].content)["state"] == {"fixture": "synthetic"}
+    finally:
+        backend.close()
+
+
+@pytest.mark.parametrize("status", [301, 302, 303, 307, 308])
+def test_redirects_never_forward_credentials_or_study_state(monkeypatch, status):
+    calls = []
+
+    def redirect(request):
+        calls.append(request)
+        return httpx.Response(status, headers={"location": "https://unapproved.example/stolen"})
+
+    original_client = httpx.Client
+    monkeypatch.setattr(r.httpx, "Client", lambda **kwargs: original_client(
+        transport=httpx.MockTransport(redirect), **kwargs
+    ))
+    backend = r.Native("beatapi", {
+        "url": r.ROUTE_DESTINATIONS["beatapi"], "model": "jev-1.13-free"
+    }, "fake-test-key")
+    try:
+        assert backend.client.follow_redirects is False
+        backend.client.follow_redirects = True  # Per-dispatch policy still wins.
+        with pytest.raises(r.HTTPFailure) as exc:
+            backend.evaluate(SimpleNamespace(model=r.PIN, questions={}), {"fixture": "synthetic"})
+        assert exc.value.status_code == status
+        assert len(calls) == 1
+        assert str(calls[0].url) == r.ROUTE_DESTINATIONS["beatapi"]
+        assert r.failure(exc.value)[0] is False
+    finally:
+        backend.close()
+
+
+def test_unknown_native_route_is_rejected_before_credentials(monkeypatch):
+    calls = []
+    monkeypatch.setattr(r.httpx, "Client", lambda **kwargs: calls.append(kwargs))
+    with pytest.raises(r.ConfigurationError):
+        r.Native("unknown", {"url": r.ROUTE_DESTINATIONS["beatapi"]}, "fake-test-key")
+    assert calls == []
+
+
+@pytest.mark.parametrize("route", [3, 4, 5])
+@pytest.mark.parametrize("url", UNSAFE_DESTINATIONS)
+def test_unsafe_destination_rejected_during_settings_construction(route, url):
+    settings = {
+        f"AI_GATEWAY_ROUTE_{route}_ENABLED": "true",
+        f"AI_GATEWAY_ROUTE_{route}_MODEL": r.PIN if route == 5 else "jev-1.13-free",
+        f"AI_GATEWAY_ROUTE_{route}_SYSTEMONE_URL": url,
+    }
+    with pytest.raises(r.ConfigurationError, match="exact HTTPS policy"):
+        r.configurations(settings)
+
+
+def test_destination_policy_rejects_accidental_in_process_reconfiguration():
+    with pytest.raises(TypeError):
+        r.ROUTE_DESTINATIONS["beatapi"] = "https://unapproved.example/v1/systemone"
+    assert r.validate_destination("beatapi", "https://api.beatapi.io/v1/systemone") == (
+        "https://api.beatapi.io/v1/systemone"
+    )
