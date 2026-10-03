@@ -112,6 +112,16 @@ def apply_policy(program: Program, answers: dict[str, dict[str, Any]]) -> dict[s
             vendor_confidence = answer.get("confidence")
             if declaration.type == "choice":
                 value = answer["choice"]
+                if policy.choice_weights is not None:
+                    # Multipliers affect selection only. Native probabilities remain
+                    # untouched; ties preserve the native selection when possible.
+                    weighted = {label: p * policy.choice_weights[label]
+                                for label, p in distributions.items()}
+                    best = max(weighted.values())
+                    if weighted[value] < best:
+                        value = next(label for label in declaration.criteria if weighted[label] == best)
+                    gate = distributions[value]
+                    basis = "native_probability_of_weighted_selected_option"
             elif declaration.type == "noul":
                 p_true = answer["noul"]
                 value = p_true >= policy.noul_threshold
@@ -133,6 +143,13 @@ def apply_policy(program: Program, answers: dict[str, dict[str, Any]]) -> dict[s
             gate = min(gates)
             basis = "minimum_component_gate_heuristic"
             # No invented distribution or composite posterior confidence.
+        if policy.score_cuts is not None:
+            value = sum(value >= cut for cut in policy.score_cuts)
+            if distributions is not None:
+                gate = distributions[str(value)]
+                basis = "native_probability_of_cut_selected_level"
+            else:
+                basis = "minimum_component_gate_heuristic_after_score_cuts"
         decisions[name] = {
             "type": declaration.type, "value": value, "probabilities": distributions,
             "p_true": p_true, "vendor_confidence": vendor_confidence,

@@ -179,6 +179,36 @@ accepted count and an empirical error constraint. If no gate qualifies, it sets
 `force_review=true`. A separate probability recalibrator such as isotonic
 regression or temperature scaling is **not implemented**.
 
+Flat `compile --fit-decision-knobs` (Python `CompileOptions(fit_decision_knobs=True)`)
+opts in to optional `native-policy/v1` extensions that fit strictly ordered `score_cuts` (K-1
+cuts in 0..K-1) or positive `choice_weights` for exactly the fixed labels. Absent
+extensions serialize exactly as older policies, preserving existing artifact
+checksums and behavior. Score cuts map the continuous native expectation (or
+rescaled composite value) to an ordinal level; Choice multipliers change only
+selection, with native ties preserved. Raw distributions, P(true), and vendor
+confidence remain separate and unchanged. Direct fitted gates use the native
+probability of the selected level or weighted-selected label, and name that
+selection provenance. Composite Score retains its explicitly heuristic minimum
+component gate; no joint probability is created.
+
+Without that opt-in, decision knobs remain unchanged and report `disabled`;
+existing Noul thresholds and review-gate fitting retain their behavior. Hierarchy
+compilation keeps its existing routing and final review gates, and rejects this
+flat-only flag.
+
+The native fitter makes no model calls and imports no DSPy. Only cached calibration
+answers and labels enter bounded two-pass coordinate search. Five grouped folds
+are constructed deterministically from IDs/groups, independent of outcomes. Each
+held-out fold needs at least `max(2, min_samples)` observations. The objective is
+Choice misclassification or normalized Score MAE. No held-out fold may worsen and
+the aggregate loss must strictly improve; ties, sparse folds, or unsuccessful
+full-calibration refits report `decision_fit.status="unchanged"` and preserve the
+original selection knobs. Review-gate fitting remains a separate operational
+step and may still set `force_review`. Reports include fold losses, train/held-out
+counts, chosen policies and synthetic provenance. These checks are conservative
+heuristics, not an independent evaluation or a claim of gains. Validation selects
+prompts; it and test data never enter fitting. Freeze still precedes test.
+
 The reported Wilson interval is descriptive; it is not a corrected guarantee
 under adaptive threshold selection or distribution shift. Per-output review flags
 are not a joint guarantee for the whole decision vector. Production needs its own
