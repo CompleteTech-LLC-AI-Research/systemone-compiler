@@ -26,6 +26,16 @@ are recorded in `INTEGRATIONS.md`; a source link is not a live execution result.
 
 ## DSPy
 
+Teacher-engine migration sources rechecked October 3, 2026:
+
+- 3.4 custom engine protocol and LiteLLM raw-response conversion:
+  https://github.com/stanfordnlp/dspy/blob/3.4.0/dspy/clients/engines/base.py
+  https://github.com/stanfordnlp/dspy/blob/3.4.0/dspy/clients/engines/litellm_engine.py
+- Engine validation and legacy transition dispatch:
+  https://github.com/stanfordnlp/dspy/blob/3.4.0/dspy/clients/lm.py
+- Preserved 3.3 legacy boundary:
+  https://github.com/stanfordnlp/dspy/blob/3.3.1/dspy/clients/lm.py
+
 - Official documentation:
   https://dspy.ai/
 - Official repository:

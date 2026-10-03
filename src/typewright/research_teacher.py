@@ -12,7 +12,8 @@ class AuditedDSPyTeacher(DSPyTeacher):
 
     DSPy may issue multiple LM requests for one signature (e.g. adapter fallback).
     Meter them separately, disable history, and enforce the declared response ID.
-    Forward counts are LM invocations; SDK retries remain disabled by the parent.
+    Request counts are engine attempts (legacy LM forwards on DSPy 3.3).
+    SDK retries remain disabled by the parent.
     """
     def __init__(self, model, *, expected_response_model, max_provider_calls, **kwargs):
         super().__init__(model, max_provider_calls=max_provider_calls, **kwargs)
@@ -21,14 +22,6 @@ class AuditedDSPyTeacher(DSPyTeacher):
         self.input_tokens, self.output_tokens = 0, 0
         self.usage_unknown_calls, self.successful_calls = 0, 0
         self.sdk_estimated_cost, self.cost_unknown_calls = 0., 0
-        forward = self.lm.forward
-
-        def metered_forward(*args, **call_kwargs):
-            response = forward(*args, **call_kwargs)
-            self.observe(response)
-            return response
-
-        self.lm.forward = metered_forward
 
     def observe(self, response):
         model = getattr(response, "model", None)
@@ -50,11 +43,6 @@ class AuditedDSPyTeacher(DSPyTeacher):
         if model != self.expected_response_model:
             raise BackendError("Teacher response model differs from the preregistered identity.")
 
-    def _predict(self, predictor, **kwargs):
-        self.budget.reserve()
-        with self.dspy.context(lm=self.lm, disable_history=True):
-            return predictor(**kwargs)
-
     def accounting(self):
         result = super().accounting()
         missing_responses = self.provider_budget.used-self.successful_calls
@@ -69,7 +57,7 @@ class AuditedDSPyTeacher(DSPyTeacher):
             partial_sdk_estimated_cost=self.sdk_estimated_cost,
             cost_unknown_calls=self.cost_unknown_calls+missing_responses,
             dollar_cost=None,
-            budget_note="Separate signature and synchronous LM-forward request ceilings; SDK retries disabled. "
+            budget_note="Separate signature and synchronous provider-request ceilings; SDK retries disabled. "
                         "Token counts are provider-reported where available. SDK cost estimates are not bills. "
                         "No hard aggregate token or dollar cap; no raw DSPy history retained.")
         return result

@@ -4,9 +4,11 @@ The loopback server below is a TEST DOUBLE standing in for a provider. Nothing h
 a provider call, or evidence about quality.
 """
 import json
+import inspect
 import threading
 import tomllib
 import warnings
+import socket
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from importlib import metadata
 from pathlib import Path
@@ -14,6 +16,20 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def loopback_only_network(monkeypatch):
+    """Fail closed if an integration regression tries any external transport."""
+    connect = socket.socket.connect
+    monkeypatch.setenv("LITELLM_LOCAL_MODEL_COST_MAP", "True")
+
+    def guarded(sock, address):
+        if sock.family in (socket.AF_INET, socket.AF_INET6):
+            assert address[0] in ("127.0.0.1", "::1"), "External network forbidden in offline teacher tests"
+        return connect(sock, address)
+
+    monkeypatch.setattr(socket.socket, "connect", guarded)
 
 
 def _optimize():
@@ -71,8 +87,8 @@ def test_teacher_uses_pinned_engine_overrides_and_unchanged_metering_against_loo
         from typewright.research_teacher import AuditedDSPyTeacher
         teacher = AuditedDSPyTeacher("deepseek/deepseek-flash", expected_response_model="deepseek-flash",
             max_provider_calls=2, allow_paid=True, share_feedback=True, max_calls=2)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")  # DSPy 3.4 deprecates the forward() override; see follow-up issue.
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always", DeprecationWarning)
             result = teacher.propose_components({"flag/instructions": '"Check this"'}, {}, ["flag/instructions"])
     finally:
         server.shutdown()
@@ -90,3 +106,7 @@ def test_teacher_uses_pinned_engine_overrides_and_unchanged_metering_against_loo
     assert account["dollar_cost"] is None
     assert teacher.lm.history == [] and teacher.revise.history == []
     assert teacher.lm.cache is False
+    assert not any("BaseLM.forward()" in str(item.message) for item in caught)
+    if "engine" in inspect.signature(teacher.dspy.LM.__init__).parameters:
+        assert "forward" not in vars(teacher.lm)
+        assert not hasattr(teacher.lm._engine_spec, "complete_legacy")
