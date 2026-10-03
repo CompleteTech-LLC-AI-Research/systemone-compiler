@@ -8,8 +8,10 @@ rather than capabilities claimed by the current release.
 1. **Verify and lock a real environment.** Install the optional SDKs, run their
    contracts and authorized inference smoke tests, generate a real dependency lock,
    and add sanitized regression fixtures from observed response schemas. This
-   includes DSPy 3.4, which is untested here and changes LM internals and the
-   Pydantic minimum ([#90](https://github.com/Jev-Engineering/TypeWright/issues/90)).
+   includes future SDK/DSPy releases beyond the verified profiles. DSPy 3.3.1
+   and 3.4.0 teacher contracts are verified offline; native compilation requires
+   the exact DSPy 3.4.0 / SDK 0.7.0 profile. Live provider qualification and a
+   resolved transitive lock remain outstanding ([#90](https://github.com/Jev-Engineering/TypeWright/issues/90)).
 2. **Establish useful benchmarks.** The BANKING77 and multi-benchmark protocols
    and the hierarchy study runner exist, but their live phases have not been
    executed and the hierarchy study still needs independently reviewed inputs.
@@ -33,15 +35,15 @@ rather than capabilities claimed by the current release.
 5. **Beginner interface.** A local wizard for labels and rubrics, improved failure
    cluster visualization, provider-budget preview, and editor support from schemas.
 
-6. **Align with DSPy's Jev support.** DSPy 3.4 ships an experimental `TypeSafe`
-   client, decision types, and the `ReAnchor` optimizer. Evaluate moving
-   compile-time evaluation onto DSPy's adapter while keeping this project's
-   budget, model-identity, and consent guarantees, and decide deliberately
-   whether the frozen runtime keeps its own backend so it never imports DSPy
-   ([#91](https://github.com/Jev-Engineering/TypeWright/issues/91), after #90).
-   A generative-LM baseline run through DSPy's decision types is not planned at
-   present.
+6. **Maintain native integration qualification.** Compile-time native evaluation
+   now uses the verified DSPy 3.4.0 `TypeSafe` wrapper; frozen execution and
+   held-out evaluation retain the direct SDK and never import DSPy
+   ([#91](https://github.com/Jev-Engineering/TypeWright/issues/91)). Recheck full
+   payload/envelope preservation, identity, consent, zero retries and budgets
+   against upstream changes before expanding its exact version guard. This
+   offline software qualification does not establish live quality or justify
+   replacing the approved native policy fitting with `ReAnchor`. A generative-LM
+   baseline through DSPy's decision types remains outside the current plan.
 
-Do not add a user interface ahead of verifying the native adapter and measuring a
-real task. Do not make “improved prompts” a promise independent of data quality and
+Do not add a user interface ahead of measuring a real task. Do not make “improved prompts” a promise independent of data quality and
 held-out results.
