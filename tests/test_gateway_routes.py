@@ -456,3 +456,11 @@ def test_unsafe_destination_rejected_during_settings_construction(route, url):
     }
     with pytest.raises(r.ConfigurationError, match="exact HTTPS policy"):
         r.configurations(settings)
+
+
+def test_destination_policy_rejects_accidental_in_process_reconfiguration():
+    with pytest.raises(TypeError):
+        r.ROUTE_DESTINATIONS["beatapi"] = "https://unapproved.example/v1/systemone"
+    assert r.validate_destination("beatapi", "https://api.beatapi.io/v1/systemone") == (
+        "https://api.beatapi.io/v1/systemone"
+    )

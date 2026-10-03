@@ -8,6 +8,7 @@ import json
 import os
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
+from types import MappingProxyType
 
 import httpx
 from dotenv import dotenv_values
@@ -21,13 +22,13 @@ PIN = "jev-1.13.0"
 # A hostile or buggy Retry-After must not freeze a whole route group indefinitely.
 MAX_COOLDOWN_SECONDS = 600
 # Proposed strict endpoint policy; live adoption requires endpoint-owner review.
-ROUTE_DESTINATIONS = {
+ROUTE_DESTINATIONS = MappingProxyType({
     "gateway-1": "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
     "gateway-2": "https://ai-gateway.vercel.sh/typesafe/v1/systemone",
     "beatapi": "https://api.beatapi.io/v1/systemone",
     "opencode-zen": "https://opencode.ai/zen/v1/systemone",
     "classifier": "https://classifier.dev/v1/systemone",
-}
+})
 
 
 def validate_destination(name, url):
