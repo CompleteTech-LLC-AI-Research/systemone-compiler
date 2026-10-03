@@ -49,6 +49,7 @@ def export(protocol_path: Path, out: Path, *, data_root: Path | None = None) -> 
             raise DataError("Prior registered test split is empty.")
         states = [project_state(source.state, row.state) for row in rows]
         inputs[task] = {"n": len(rows), "manifest_sha256": digest,
+                        "declared_input_fields": sorted(source.state),
                         "projected_input_sha256s": sorted({fingerprint(state) for state in states})}
         texts[task] = {"n": len(rows), "manifest_sha256": digest,
                        "normalized_text_sha256s": sorted(set().union(
@@ -70,6 +71,41 @@ def export(protocol_path: Path, out: Path, *, data_root: Path | None = None) -> 
         raise
     return {"tasks": len(inputs), "test_rows": sum(task["n"] for task in inputs.values()),
             "input_export_sha256": fingerprint(input_export), "text_export_sha256": fingerprint(text_export)}
+
+
+def read_holdout_exclusions(input_path: Path, text_path: Path, task: str) -> dict:
+    """Validate one export pair for live registration without raw row data."""
+    import re
+
+    inputs, texts = load_document(input_path), load_document(text_path)
+    try:
+        if (inputs["format"] != "systemone-prior-flat-test-input-exclusions/v1" or
+                texts["format"] != "systemone-prior-flat-test-text-exclusions/v1" or
+                inputs["source_protocol_sha256"] != texts["source_protocol_sha256"] or
+                not isinstance(inputs["source_protocol_sha256"], str) or
+                not re.fullmatch(r"[0-9a-f]{64}", inputs["source_protocol_sha256"]) or
+                texts["normalization"] != TEXT_NORMALIZATION):
+            raise ValueError
+        entry, text_entry = inputs["tasks"][task], texts["tasks"][task]
+        fields = entry["declared_input_fields"]
+        exact, normalized = entry["projected_input_sha256s"], text_entry["normalized_text_sha256s"]
+        if (entry["manifest_sha256"] != text_entry["manifest_sha256"] or
+                not isinstance(entry["manifest_sha256"], str) or
+                not re.fullmatch(r"[0-9a-f]{64}", entry["manifest_sha256"]) or
+                type(entry["n"]) is not int or entry["n"] < 1 or
+                entry["n"] != text_entry["n"] or
+                not isinstance(fields, list) or not fields or
+                any(not isinstance(field, str) or not field for field in fields) or
+                len(set(fields)) != len(fields) or
+                any(not isinstance(values, list) or not values or any(
+                    not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+                    for value in values) for values in (exact, normalized))):
+            raise ValueError
+    except (KeyError, TypeError, ValueError) as exc:
+        raise DataError("Malformed or mismatched prior-holdout export pair.") from exc
+    return {"prior_test_input_sha256s": exact, "prior_test_input_fields": fields,
+            "prior_test_text_sha256s": normalized,
+            "prior_test_text_normalization": TEXT_NORMALIZATION}
 
 
 def main(argv=None) -> int:

@@ -16,12 +16,13 @@ Choice requires fixed labels and distinct criteria. Never invent an output categ
 Score requires 2–10 ordered, independently meaningful verbal levels; levels are zero-indexed.
 Noul returns P(true), not a degree/score, and has no native confidence value.
 Questions within one native request are independent; they cannot consume answers from that same request.
-Hierarchy stages may consume validated outputs from earlier requests through declared typed inputs.
 Return JSON data only. No Python, tools, execution, network configuration, or credentials.
 Keep external decision goals, output ranges, and meaning unchanged. Do not memorize example IDs.
 Do not relax safety or privacy boundaries to improve scores. Empty/missing evidence is not affirmative evidence.
 """.strip()
 
+
+HIERARCHY_TEXT_RULES = DESIGN_RULES + "\nHierarchy stages may consume validated outputs from earlier requests through declared typed inputs."
 
 def template_program(source: UseCase) -> Program:
     return Program(
@@ -171,7 +172,8 @@ class DSPyTeacher:
                            components: list[str]) -> dict[str, str]:
         prediction = self._predict(
             self.revise,
-            rules=DESIGN_RULES + "\nReturn EXACTLY the requested keys, mapping each to a string, object, array, "
+            rules=(HIERARCHY_TEXT_RULES if components and all(k.startswith("graph/") for k in components)
+                   else DESIGN_RULES) + "\nReturn EXACTLY the requested keys, mapping each to a string, object, array, "
                                 "or null entry value. Do not add questions or change output labels/ranges.",
             current_components_json=canonical({k: json_loads(v) for k, v in candidate.items()}),
             requested_components_json=canonical(components), feedback_json=canonical(reflective_dataset),

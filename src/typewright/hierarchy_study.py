@@ -234,7 +234,16 @@ def register(source_path: str | Path, candidate_path: str | Path, flat_path: str
                                      "and exact-state plus normalized-text holdout exclusions.")
         projected = [project_state(source.source.state, row.state)
                      for split in SPLITS for row in splits[split]]
-        if {fingerprint(state) for state in projected} & set(exclusions):
+        exact_projections = list(projected)
+        prior_fields = attestation.get("prior_test_input_fields")
+        if prior_fields is not None:
+            if (not isinstance(prior_fields, list) or not prior_fields or
+                    any(not isinstance(field, str) or not field for field in prior_fields) or
+                    len(set(prior_fields)) != len(prior_fields)):
+                raise ConfigurationError("Prior holdout declared input fields are invalid.")
+            exact_projections.extend({field: row.state[field] for field in prior_fields if field in row.state}
+                                     for split in SPLITS for row in splits[split])
+        if {fingerprint(state) for state in exact_projections} & set(exclusions):
             raise DataError("Live hierarchy input overlaps an excluded prior-study holdout.")
         text_exclusion_set = set(text_exclusions)
         if any(_normalized_text_fingerprints(state) & text_exclusion_set for state in projected):

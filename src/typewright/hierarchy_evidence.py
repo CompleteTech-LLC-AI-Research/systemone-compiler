@@ -130,10 +130,19 @@ class HierarchyEvidence:
         try:
             self.lock_file = (self.directory / ".owner.lock").open("a+b")
         except OSError as exc:
-            raise ConfigurationError(
-                "Cannot open the hierarchy evidence ownership lock. Replay and resume require "
-                "a writable lock file; copy archived evidence into a private writable directory."
-            ) from exc
+            if self.mode == "create":
+                # Remove only our still-empty directory; preserve racing content.
+                try:
+                    self.directory.rmdir()
+                except OSError:
+                    pass
+                message = "Cannot create the hierarchy evidence ownership lock."
+            elif isinstance(exc, PermissionError):
+                message = ("Replay and resume require a writable lock file; "
+                           "copy archived evidence into a private writable directory.")
+            else:
+                message = "Cannot open the hierarchy evidence ownership lock for " + self.mode + "."
+            raise ConfigurationError(message) from exc
         try:
             _lock(self.lock_file)
             self._open_locked()

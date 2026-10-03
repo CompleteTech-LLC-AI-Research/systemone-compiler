@@ -108,3 +108,15 @@ The 2026-10-03 owner decision separates delivered software in #20/#21 from the
 original live requirements retained in #74 and epic #6. The proposal above remains
 unapproved for execution. Closing the software trackers grants no spending, data
 sharing, semantic review or held-out test permission.
+
+## Consuming prior-holdout export pairs
+
+New exact-input exports record each task's `declared_input_fields`. Use
+`typewright.holdout_exclusions.read_holdout_exclusions(input_path, text_path, task)`
+to validate a matching export pair and merge its returned fields into the reviewed
+data attestation. Live registration compares all four splits through both the new
+source projection and the prior declared fields, and checks case-folded,
+whitespace-normalized text. This catches exact prior-input overlap when the new
+source adds fields. Legacy manually supplied hash lists remain readable but do not
+provide prior-field identity assurance. Neither form establishes semantic
+independence or authorizes uploads; a human still reviews near duplicates.
